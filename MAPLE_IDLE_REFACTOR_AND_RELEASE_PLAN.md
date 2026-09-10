@@ -18,11 +18,7 @@
 - BAT 或簡易 Launcher 啟動
 - GitHub 作為原始碼、Issue、版本與 Release 的中心
 
-目前 Web 版保留為：
-
-- UI / UX prototype
-- 未來若要瀏覽器版時的設計參考
-- 不再優先補齊與 Python 版同等功能
+Web 版已永久放棄：不維護、不相容，也不作為未來瀏覽器版的設計參考。
 
 不進行以下工程：
 
@@ -525,32 +521,13 @@ Random()
 NekoMaTA864/Maple_Idle
 ```
 
-若目前 Repo 被 Web prototype 使用：
-
-建議二選一：
-
-### 方案 A：重新定位現 Repo
+正式 repository 以 Python 主線為唯一內容：
 
 ```text
-Maple_Idle
+NekoMaTA864/Maple_Idle
 ```
 
-改回 Python 主線。
-
-Web prototype 搬：
-
-```text
-Maple_Idle_Web
-```
-
-### 方案 B：保留現 Repo
-
-```text
-Maple_Idle_Web
-Maple_Idle_Python
-```
-
-較推薦 A，因為 Python 才是正式主線。
+不保留、不拆分、也不建立 Web prototype repository；任何歷史 Web 檔案若仍存在，另行確認後再從版本控制移除，不能成為 Python 發行或架構的相容約束。
 
 ---
 
@@ -1029,6 +1006,8 @@ zones
 - 無 UI callback。
 - 可 headless test。
 
+進入本階段前先完成 characterization / golden cases，並為 combat、AI、loot 導入可注入且可 seed 的 RNG。不要以「消除所有 local imports」作為目標；只處理已驗證的 circular dependency 或有實際維護成本的 local import。
+
 ---
 
 ## Phase 3 — Event-driven Combat
@@ -1049,6 +1028,8 @@ Combat → UI direct calls
 
 - Battle 可完全 headless 跑完整 encounter。
 - VFX / Sound 改為 event consumers。
+
+遷移時先以相容 adapter 並行產生既有 VFX、popup、log、audio 結果，固定 tick ordering 與 golden outputs 後才移除舊 side effects。DPS 工具必須停止配置 presentation state，但繼續使用同一戰鬥規則。
 
 ---
 
@@ -1086,6 +1067,8 @@ backup
 - 舊 save 可讀。
 - 新 save 可存。
 - migration 有 tests。
+
+此 phase 可在 Player／Combat facade 拆解之前獨立進行；第一步僅加入 schema version、no-op v1 migration 與舊存檔 regression fixture，避免與資料夾重排或 release layout 一起變更。
 
 ---
 
@@ -1265,7 +1248,7 @@ Global State
 
 ```text
 Python / PySide6 = Main Game
-Web             = Prototype / Reference
+Web             = Abandoned / Out of scope
 
 Game Rules      ≠ UI
 Game State      ≠ Widget State

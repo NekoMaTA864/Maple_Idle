@@ -24,3 +24,4 @@ if errorlevel 1 (
     echo DPS 計算器執行完畢或中斷。
     pause
 )
+

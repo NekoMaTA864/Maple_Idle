@@ -105,3 +105,4 @@ Maple_Idle/
 
 ## 📜 授權與宣告 (Disclaimer)
 本專案為個人程式設計學習與放置遊戲機制研究之非營利開源專案。MapleStory 相關著作權與商標歸原作者及 NEXON 公司所有。
+
