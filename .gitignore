@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Portable Python Runtime (distributed via GitHub Releases, excluded from git)
+runtime/
+
+# Player Saves & Backups (never commit private save data)
+saves/
+src/saves/
+src/saves/backups/
+
+# Execution Logs
+logs/
+*.log
+
+# Scratch scripts & temporary experiments
+scratch/
+src/scratch/
+
+# OS / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+
+# Archives & Distribution artifacts
+*.zip
+*.tar.gz
+*.rar
+dist/
+build/
+*.spec
