@@ -40,13 +40,14 @@ class MonsterSkill:
     def trigger(self):
         self.timer = self.cooldown
 
-    def clone(self):
+    def clone(self, rng=None):
         s = MonsterSkill(
             self.skill_id, self.name, self.cooldown, self.target_type,
             self.dmg_mult, self.debuff_type, self.debuff_duration,
             self.shield_val, self.vfx_kind, self.vfx_color, self.cast_desc
         )
-        s.timer = random.uniform(2.0, self.cooldown * 0.7)
+        rng = random if rng is None else rng
+        s.timer = rng.uniform(2.0, self.cooldown * 0.7)
         return s
 
 
@@ -87,32 +88,32 @@ BOSS_SKILLS_CATALOG = {
 }
 
 
-def get_skills_for_boss(zone_id, boss_name="", skill_kit=None):
+def get_skills_for_boss(zone_id, boss_name="", skill_kit=None, rng=None):
     """依據區域 skill_kit 或主題為首領配置專屬戰術技能"""
     if skill_kit:
         skills = []
         for sk_id in skill_kit:
             if sk_id in BOSS_SKILLS_CATALOG:
-                skills.append(BOSS_SKILLS_CATALOG[sk_id].clone())
+                skills.append(BOSS_SKILLS_CATALOG[sk_id].clone(rng=rng))
         if skills:
             return skills
 
     skills = []
     # 所有 Boss 均配置基礎 AOE 震地
-    skills.append(BOSS_SKILLS_CATALOG["earthquake_slam"].clone())
+    skills.append(BOSS_SKILLS_CATALOG["earthquake_slam"].clone(rng=rng))
 
     if "冰" in zone_id or "雪" in boss_name or "elnath" in zone_id:
-        skills.append(BOSS_SKILLS_CATALOG["frost_nova"].clone())
+        skills.append(BOSS_SKILLS_CATALOG["frost_nova"].clone(rng=rng))
     elif "炎魔" in boss_name or "世界樹" in zone_id or "荒野" in zone_id or "world_tree" in zone_id or "perion" in zone_id:
-        skills.append(BOSS_SKILLS_CATALOG["hell_fire"].clone())
+        skills.append(BOSS_SKILLS_CATALOG["hell_fire"].clone(rng=rng))
     elif "神殿" in zone_id or "黑魔法師" in boss_name or "利曼" in zone_id or "temple" in zone_id or "limen" in zone_id:
-        skills.append(BOSS_SKILLS_CATALOG["dark_curse"].clone())
-        skills.append(BOSS_SKILLS_CATALOG["chaos_laser"].clone())
+        skills.append(BOSS_SKILLS_CATALOG["dark_curse"].clone(rng=rng))
+        skills.append(BOSS_SKILLS_CATALOG["chaos_laser"].clone(rng=rng))
     elif "玩具城" in zone_id or "機械" in zone_id or "ludi" in zone_id or "scrapyard" in zone_id:
-        skills.append(BOSS_SKILLS_CATALOG["chaos_laser"].clone())
+        skills.append(BOSS_SKILLS_CATALOG["chaos_laser"].clone(rng=rng))
     else:
         # 預設通用技能：虛空護盾
-        skills.append(BOSS_SKILLS_CATALOG["void_barrier"].clone())
+        skills.append(BOSS_SKILLS_CATALOG["void_barrier"].clone(rng=rng))
 
     return skills
 
@@ -142,4 +143,3 @@ def scale_monster_stats(base_data, floor=1, is_boss=False):
         scaled["def"] = max(1, int(base_data["def"] * 1.15))
 
     return scaled
-

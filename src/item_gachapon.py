@@ -10,7 +10,7 @@ import random
 from item_catalog import ITEM_REQUIRED_LEVEL, ITEM_INHERENT_RARITY, SPECIAL_SEED_RINGS
 from item_potential import ABBY_SCROLLS
 
-def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
+def draw_gachapon(player, draw_count=1, *, item_cls, seed_ring_creator) -> tuple[bool, str, list]:
     """
     黃金轉蛋機 (Golden Gachapon)：
     - 單抽 100,000 金幣 / 十連抽 900,000 金幣 (9折特惠)
@@ -20,8 +20,6 @@ def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
       3. 方塊道具 (閃耀方塊、附加方塊、楓方塊)
       4. 高額楓幣與符號碎片大獎
     """
-    from item_system import Item, create_seed_ring
-
     cost = 100000 if draw_count == 1 else 900000
     if player.gold < cost:
         return False, f"金幣不足！轉蛋需要 ${cost:,} 金幣", []
@@ -49,9 +47,9 @@ def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
             is_seed = b_name in SPECIAL_SEED_RINGS
 
             if is_seed:
-                loot_item = create_seed_ring(b_name)
+                loot_item = seed_ring_creator(b_name)
             else:
-                loot_item = Item(
+                loot_item = item_cls(
                     slot=b_slot,
                     rarity=ITEM_INHERENT_RARITY.get(b_name, "legendary"),
                     level_req=ITEM_REQUIRED_LEVEL.get(b_name, 200),
@@ -138,7 +136,7 @@ def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
                 ("法夫納斬首巨劍", "weapon"), ("深淵霸王皇家頭盔", "hat")
             ]
             b_name, b_slot = random.choice(mid_items)
-            loot_item = Item(
+            loot_item = item_cls(
                 slot=b_slot,
                 rarity=ITEM_INHERENT_RARITY.get(b_name, "epic"),
                 level_req=ITEM_REQUIRED_LEVEL.get(b_name, 150),
@@ -197,4 +195,3 @@ def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
 
     msg = f"🎉 恭喜完成 {draw_count} 連抽！消耗 ${cost:,} 金幣。"
     return True, msg, results
-

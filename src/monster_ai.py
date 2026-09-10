@@ -1,7 +1,6 @@
 """
 《新楓之谷：放置遠征隊》怪物行為與技能施放模組 (monster_ai.py)
 """
-import random
 from settings import COLOR_HP_RED, COLOR_SHIELD_BLUE
 
 
@@ -43,7 +42,7 @@ def process_monster_attack(combat_mgr, m, sound_mgr):
         # 多怪物波次攻擊力平衡因子：避免多隻怪同時秒殺主角
         alive_count = len([x for x in combat_mgr.monsters if x.is_alive])
         count_factor = 1.0 if alive_count <= 1 else max(0.48, 1.0 / (alive_count ** 0.5))
-        dmg = max(1, int(raw_dmg * count_factor * random.uniform(0.9, 1.1)))
+        dmg = max(1, int(raw_dmg * count_factor * combat_mgr.rng.uniform(0.9, 1.1)))
 
     hp_lost, absorbed = target.take_damage(dmg)
     combat_mgr.combat_stats.record_damage_taken(0, hp_lost, absorbed)
@@ -114,7 +113,7 @@ def execute_monster_skill(combat_mgr, skill, alive_members, sound_mgr, boss_mons
         target_def = target.get_defense(combat_mgr.player)
         def_reduction = min(0.50, target_def / (target_def + m.atk * 0.85 + 10))
         raw_dmg = (m.atk * skill.dmg_mult) * (1.0 - def_reduction)
-        dmg = max(1, int(raw_dmg * random.uniform(0.92, 1.08)))
+        dmg = max(1, int(raw_dmg * combat_mgr.rng.uniform(0.92, 1.08)))
 
     hp_lost, absorbed = target.take_damage(dmg)
     combat_mgr.combat_stats.record_damage_taken(0, hp_lost, absorbed)

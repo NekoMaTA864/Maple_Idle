@@ -27,7 +27,7 @@ from item_potential import (
     get_slot_potential_pool, POTENTIAL_POOLS, ABBY_SCROLLS
 )
 from item_gachapon import (
-    draw_gachapon
+    draw_gachapon as _draw_gachapon
 )
 from settings import (
     COLOR_COMMON, COLOR_UNCOMMON, COLOR_RARE, COLOR_EPIC, COLOR_LEGENDARY
@@ -55,6 +55,16 @@ def create_seed_ring(ring_name: str) -> "Item":
     item.skill_level = info.get("skill_level", 4)
     item.description = info.get("description", "")
     return item
+
+
+def draw_gachapon(player, draw_count=1) -> tuple[bool, str, list]:
+    """Compatibility facade that supplies the equipment constructors to gachapon rules."""
+    return _draw_gachapon(
+        player,
+        draw_count,
+        item_cls=Item,
+        seed_ring_creator=create_seed_ring,
+    )
 
 
 class Item:

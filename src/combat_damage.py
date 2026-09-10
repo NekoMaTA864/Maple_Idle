@@ -1,11 +1,10 @@
 """
 《新楓之谷：放置遠征隊》遠征隊員攻擊、傷害計算與護盾模組 (combat_damage.py)
 """
-import random
 from settings import COLOR_GOLD, COLOR_HEAL_GREEN, COLOR_SHIELD_BLUE, COLOR_TEXT_MAIN
 from skills import is_skill_aoe
 from monster import get_skill_priority
-from combat_vfx_manager import PendingHit
+from combat_events import PendingHit
 
 
 def execute_pending_hit(combat_mgr, hit, sound_mgr):
@@ -143,7 +142,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
         combat_mgr.add_popup(f"[{used_skill.name}]", f"slot_{member.slot_idx}", used_skill.color, is_skill=True)
         combat_mgr.add_log(f"[{member.name}] 吟唱【{used_skill.name}】！全隊獲得【{used_skill.tag_name}】戰力大增！", used_skill.color)
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
-        if cd_skip > 0 and random.random() < cd_skip:
+        if cd_skip > 0 and combat_mgr.rng.random() < cd_skip:
             combat_mgr.add_popup("[無冷!]", f"slot_{member.slot_idx}", (255, 215, 0), is_skill=True)
         else:
             used_skill.trigger()
@@ -157,7 +156,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
         combat_mgr.add_popup(f"[{used_skill.name}]", f"slot_{member.slot_idx}", used_skill.color, is_skill=True)
         combat_mgr.add_log(f"[{member.name}] 施展【{used_skill.name}】！獲得個人專屬強化！", used_skill.color)
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
-        if cd_skip > 0 and random.random() < cd_skip:
+        if cd_skip > 0 and combat_mgr.rng.random() < cd_skip:
             combat_mgr.add_popup("[無冷!]", f"slot_{member.slot_idx}", (255, 215, 0), is_skill=True)
         else:
             used_skill.trigger()
@@ -285,11 +284,11 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
             )
             raw_total_dmg *= (1.0 + b_dmg_mult)
 
-        total_dmg = int(raw_total_dmg * random.uniform(0.92, 1.08))
+        total_dmg = int(raw_total_dmg * combat_mgr.rng.uniform(0.92, 1.08))
 
         # 暴擊判定 (含手套與套裝暴擊傷害、萌獸爆傷，以及技能必定暴擊 guaranteed_crit)
         has_guaranteed_crit = getattr(used_skill, "guaranteed_crit", False) if used_skill else False
-        is_crit = has_guaranteed_crit or (random.random() < member.get_crit_chance(p))
+        is_crit = has_guaranteed_crit or (combat_mgr.rng.random() < member.get_crit_chance(p))
         if is_crit:
             crit_dmg_bonus = (
                 p.get_gear_stat_sum("crit_dmg")
@@ -371,7 +370,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
 
     if used_skill:
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
-        if cd_skip > 0 and random.random() < cd_skip:
+        if cd_skip > 0 and combat_mgr.rng.random() < cd_skip:
             combat_mgr.add_popup("[無冷!]", f"slot_{member.slot_idx}", (255, 215, 0), is_skill=True)
         else:
             used_skill.trigger()

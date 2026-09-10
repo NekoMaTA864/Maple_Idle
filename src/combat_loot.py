@@ -1,7 +1,6 @@
 """
 《新楓之谷：放置遠征隊》戰鬥擊殺掉落與樓層晉級模組 (combat_loot.py)
 """
-import random
 from settings import COLOR_GOLD
 from item_system import generate_loot, create_seed_ring
 from combat_zones import ZONES
@@ -61,7 +60,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
     base_chance = 0.85 if is_boss else (0.25 if has_elite else 0.07)
     drop_chance = min(1.0, base_chance * (1.0 + player_drop_bonus))
 
-    if random.random() < drop_chance:
+    if combat_mgr.rng.random() < drop_chance:
         ref_m = combat_mgr.monsters[0] if combat_mgr.monsters else combat_mgr.monster
         ref_lvl = ref_m.lvl if ref_m else 1
         source_type = "boss" if is_boss else ("elite" if has_elite else "normal")
@@ -81,33 +80,33 @@ def handle_monster_killed(combat_mgr, sound_mgr):
     if is_boss:
         ref_m = combat_mgr.monsters[0] if combat_mgr.monsters else combat_mgr.monster
         b_lvl = ref_m.lvl if ref_m else 1
-        if b_lvl >= 160 and random.random() < 0.40:
-            s_roll = random.choice(["V", "B", "X"])
+        if b_lvl >= 160 and combat_mgr.rng.random() < 0.40:
+            s_roll = combat_mgr.rng.choice(["V", "B", "X"])
             s_name = "黑卷B" if s_roll == "B" else f"{s_roll}卷"
             combat_mgr.player.abby_scrolls[s_roll] = combat_mgr.player.abby_scrolls.get(s_roll, 0) + 1
             combat_mgr.add_log(f"[首領秘寶] 討伐首領大捷！斬獲神級【艾比{s_name} x1】！已存入庫存！", (255, 215, 0))
             sound_mgr.play("loot")
-        elif b_lvl >= 100 and random.random() < 0.35:
-            s_roll = random.choice(["X", "R"])
+        elif b_lvl >= 100 and combat_mgr.rng.random() < 0.35:
+            s_roll = combat_mgr.rng.choice(["X", "R"])
             combat_mgr.player.abby_scrolls[s_roll] = combat_mgr.player.abby_scrolls.get(s_roll, 0) + 1
             combat_mgr.add_log(f"[首領秘寶] 討伐首領大捷！獲得稀有【艾比{s_roll}卷 x1】！已存入庫存！", (200, 220, 255))
             sound_mgr.play("loot")
-        elif random.random() < 0.30:
-            s_roll = random.choice(["R", "electric"])
+        elif combat_mgr.rng.random() < 0.30:
+            s_roll = combat_mgr.rng.choice(["R", "electric"])
             s_name = "極電卷" if s_roll == "electric" else "宿命R卷"
             combat_mgr.player.abby_scrolls[s_roll] = combat_mgr.player.abby_scrolls.get(s_roll, 0) + 1
             combat_mgr.add_log(f"[首領掉落] 討伐首領獲得【艾比{s_name} x1】！", (180, 230, 255))
 
-        if random.random() < 0.30:
-            c_roll = random.choice(["bright", "bonus_bright", "bonus_occult"])
+        if combat_mgr.rng.random() < 0.30:
+            c_roll = combat_mgr.rng.choice(["bright", "bonus_bright", "bonus_occult"])
             c_names = {"bright": "閃耀方塊", "bonus_bright": "閃耀附加方塊", "bonus_occult": "可疑附加方塊"}
             combat_mgr.player.cube_inventory[c_roll] = combat_mgr.player.cube_inventory.get(c_roll, 0) + 1
             combat_mgr.add_log(f"[首領掉落] 獲得珍貴【{c_names[c_roll]} x1】！", (160, 240, 180))
 
         # 首領專屬稀有掉落：起源之塔特殊種子戒指 (規範之戒、持續之戒、武器泡泡之戒)
         # 依據首領等級開放：Lv.80+ 擊破首領時有機率斬獲種子戒指
-        if b_lvl >= 80 and random.random() < (0.22 if b_lvl >= 160 else 0.12):
-            seed_name = random.choice(["規範之戒", "持續之戒", "武器泡泡之戒"])
+        if b_lvl >= 80 and combat_mgr.rng.random() < (0.22 if b_lvl >= 160 else 0.12):
+            seed_name = combat_mgr.rng.choice(["規範之戒", "持續之戒", "武器泡泡之戒"])
             seed_ring = create_seed_ring(seed_name)
             if combat_mgr.player.add_to_inventory(seed_ring):
                 sound_mgr.play("loot")
@@ -122,7 +121,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             combat_mgr.add_log(f"[遠征榮耀] 討伐首領立功！斬獲【名譽點數 +{honor_gain:,}】！", (120, 240, 180))
             combat_mgr.add_popup(f"[名譽 +{honor_gain:,}]", "monster_0", (120, 240, 180))
 
-        if hasattr(combat_mgr.player, "familiar_manager") and random.random() < 0.45:
+        if hasattr(combat_mgr.player, "familiar_manager") and combat_mgr.rng.random() < 0.45:
             combat_mgr.player.familiar_manager.familiar_cards += 1
             combat_mgr.add_log("[萌獸秘寶] 首領掉落了珍稀的【萌獸洗潛卡包 x1】！", (255, 210, 60))
 
@@ -134,7 +133,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
     if hasattr(combat_mgr.player, "familiar_manager"):
         fam_base_chance = 0.50 if is_boss else (0.25 if has_elite else 0.08)
         fam_chance = min(1.0, fam_base_chance * (1.0 + player_drop_bonus))
-        if random.random() < fam_chance:
+        if combat_mgr.rng.random() < fam_chance:
             from familiar_system import drop_stage_familiar, FAMILIAR_TIER_NAMES
             new_fam = drop_stage_familiar(is_boss=is_boss, has_elite=has_elite)
             combat_mgr.player.familiar_manager.add_familiar(new_fam)
@@ -149,8 +148,8 @@ def handle_monster_killed(combat_mgr, sound_mgr):
     sym_key = zone.get("symbol_drop")
     if sym_key:
         frag_chance = 0.95 if is_boss else (0.55 if has_elite else 0.28)
-        if random.random() < frag_chance:
-            frag_count = (random.randint(2, 4) if is_boss else (2 if has_elite else 1))
+        if combat_mgr.rng.random() < frag_chance:
+            frag_count = (combat_mgr.rng.randint(2, 4) if is_boss else (2 if has_elite else 1))
             combat_mgr.player.add_symbol_fragment(sym_key, frag_count)
             sym_name = combat_mgr.player.get_symbol_name(sym_key)
             combat_mgr.add_popup(f"[{sym_name} 碎片 +{frag_count}]", "monster_0", (180, 220, 255))

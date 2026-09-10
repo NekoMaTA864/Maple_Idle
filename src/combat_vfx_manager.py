@@ -1,8 +1,9 @@
-"""
-《新楓之谷：放置遠征隊》戰鬥視覺特效與多段打擊隊列 (combat_vfx_manager.py)
-"""
+"""《新楓之谷：放置遠征隊》戰鬥視覺特效管理器。"""
 import math
 import random
+
+# Backward-compatible re-export. PendingHit is a combat payload, not VFX state.
+from combat_events import PendingHit
 
 class VisualEffect:
     def __init__(self, kind, x, y, target_x=None, target_y=None, color=(255, 255, 255), duration=0.45,
@@ -82,21 +83,4 @@ class VisualEffectManager:
         for eff in self.effects:
             eff.update(dt)
         self.effects = [e for e in self.effects if e.is_alive]
-
-
-# =========================================================================
-# 多段連擊隊列 (PendingHit)
-# =========================================================================
-class PendingHit:
-    def __init__(self, delay, member, target_name, skill_name, damage, is_crit, vfx_type, vfx_color, target_monster_idx=None):
-        self.delay = delay
-        self.member = member
-        self.target_name = target_name
-        self.skill_name = skill_name
-        self.damage = damage
-        self.is_crit = is_crit
-        self.vfx_type = vfx_type
-        self.vfx_color = vfx_color
-        self.target_monster_idx = target_monster_idx
-
 

@@ -7,8 +7,8 @@
 
 - 執行環境：內附 Python 3.12.10、pygame 2.6.1。
 - 命令：`runtime\python\python.exe -m unittest discover -s src/tests -p "test_*.py" -v`
-- 結果：48 tests，全部通過，1.610 秒。
-- Git 工作樹目前不能建立 baseline tag：`git status --short` 回報 `.git/index: index file smaller than expected`。此為 repository metadata 損壞；本輪未修復、未寫入 Git。
+- 結果：84 tests，全部通過。
+- Git index 已修復，並已建立 annotated baseline tag `python-baseline-pre-refactor`。
 - `.gitignore` 已排除 `runtime/`、`saves/`、`src/saves/`、`logs/`、scratch 與發行產物。實際預設存檔位置仍是 `src/saves/savegame.json`，尚未遷到根目錄 `saves/`。
 
 ## 實際結構與邊界
@@ -32,14 +32,14 @@
 
 `combat_damage` 包含技能選擇、傷害公式、ARC/AUT、暴擊、DoT、heal、shield、buff、multi-hit 排程及 presentation/audio 呼叫；`monster_ai` 同樣混合 AI、傷害、狀態改變和 presentation；`combat_loot` 混合獎勵、進度、物品／寵物／符號 mutation、log/popup/audio。`combat_stats.py` 則是獨立 dataclass 統計模型，是最乾淨的 combat 模組。
 
-`dps_calculator.run_dps_simulation()` 建立同一個 `Player` 與 `CombatManager`，以 `SilentSound` 呼叫同一個 `CombatManager.update()`；因此正式戰鬥規則沒有另寫一套 DPS damage loop。它仍會建立 VFX/popup 等 state，也沒有注入 RNG：combat、loot、monster、item 等散用 module-level `random`。所以「同一核心」成立，「deterministic、純無表現模擬」尚不成立。
+`dps_calculator.run_dps_simulation()` 建立同一個 `Player` 與 `CombatManager`，以 `SilentSound` 呼叫同一個 `CombatManager.update()`；因此正式戰鬥規則沒有另寫一套 DPS damage loop。`CombatManager.rng` 已可注入，且已有 seeded characterization coverage；它仍會建立 VFX/popup 等 state，所以「同一核心」成立，「純無表現模擬」仍是 Milestone 3 的工作。
 
 ## Circular imports 與 local imports
 
-對 76 個非測試、非 scratch Python modules 的 AST 掃描得到 150 條內部 import edges。包含函式內 imports 的 project-level SCC 有兩組：
+原始掃描曾發現兩組 project-level SCC；兩組都已在後續小 slice 中解除：
 
-1. `item_system <-> item_gachapon`：前者頂層 re-export gachapon API；後者在 `draw_gachapon()` 局部 import `Item`／`create_seed_ring`。
-2. `player_data <-> player_save`：前者頂層 import save module 作 forwarding；後者在 load 時局部 import `TeamMember`。
+1. `item_system <-> item_gachapon`：**resolved**。`item_gachapon` 接收必要的 item/seed-ring construction dependency，保留 `item_system` facade。
+2. `player_data <-> player_save`：**resolved**。persistence module 不再 import `player_data`，並保留 Player facade 的 save/load 行為。
 
 共有 39 個 production local imports（排除 `src/scratch/`；包含標準庫、Qt 與專案 imports）。它們不能一概視為 bug：例如 lazy Qt dialog import 可以是啟動成本或 UI package cycle 的合理策略；`uuid`／`random` 的函式內 import 也不是 circular-import workaround。優先處理上述兩個真實 cycles，並逐一為其餘 local import 記錄原因；不要設定「消除所有 local imports」作為目標。
 
@@ -47,9 +47,9 @@
 
 - `sound.sound_mgr` 是 module-level singleton；戰鬥本身沒有 import 它，而是由呼叫端傳入。因此比舊報告描述得好一些，但 audio port 仍和 battle function signatures 與流程耦合。
 - module-level catalog data（zones、職業、item／pet tables）主要是設定資料；目前沒有證據顯示它們在 runtime 被寫入。不可與真正的 global mutable runtime state 混為一談。
-- `pyside_ui.py` 直接改 `repeat_current_zone`（252、261、270、272、276），並直接扣／加 `gold`、改 `abby_scrolls`、`cube_inventory`、`familiar_cubes`、寵物與寵物裝備（約 546–682）。這是最清楚、最適合 service 化的 UI 穿透 mutation。
+- 原本 `pyside_ui.py` 對 repeat-zone 與 shop/economy state 的直接 mutation 已 **resolved**：repeat-zone 經由 `CombatManager.set_repeat_current_zone()`，shop/economy 經由小型 `shop_service` command functions 處理。
 - UI 的一般裝備、符號、隊伍操作多數已經呼叫 Player methods；不應誇大成「所有 UI 操作都繞過 domain」。
-- 未發現 Qt leak 到 domain/core imports；但 VFX 是 Python presentation code，並非 domain。`combat_vfx_manager.PendingHit` 把 combat queue model 放在 VFX 模組，是語意方向錯置，即使它本身不 import Qt。
+- 未發現 Qt leak 到 domain/core imports；但 VFX 是 Python presentation code，並非 domain。`PendingHit` 已移至純 `combat_events` module，`combat_vfx_manager` 僅保留 compatibility re-export。
 
 ## Save / Load 與發行
 

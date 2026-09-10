@@ -16,8 +16,9 @@ from combat_stats import CombatStats
 from combat_zones import ZONES
 from combat_vfx_manager import (
     VisualEffect, _get_vfx_priority, HIGH_PRIORITY_VFX,
-    VisualEffectManager, PendingHit
+    VisualEffectManager
 )
+from combat_events import PendingHit
 from monster import Monster, get_skill_priority
 from combat_loot import handle_monster_killed
 from monster_ai import process_monster_attack, execute_monster_skill
@@ -30,8 +31,10 @@ __all__ = [
 
 
 class CombatManager:
-    def __init__(self, player):
+    def __init__(self, player, rng=None):
         self.player = player
+        # Defaulting to the existing module keeps production RNG distribution and call order.
+        self.rng = random if rng is None else rng
         self.current_zone_idx = 0
         self.unlocked_zones = 1
 
@@ -102,6 +105,15 @@ class CombatManager:
             self.spawn_next_monster()
             zone = self.get_current_zone()
             self.add_log(f"遠征隊已挺進【{zone['name']}】第 1/10 層！", (100, 220, 255))
+
+    def set_repeat_current_zone(self, enabled, announce=False):
+        self.repeat_current_zone = bool(enabled)
+        if announce:
+            zone = self.get_current_zone()
+            if self.repeat_current_zone:
+                self.add_log(f"[循環刷怪] 已鎖定【{zone['name']}】！首領擊破後原地重置第 1 層刷碎片！", (100, 220, 255))
+            else:
+                self.add_log("[推進模式] 已恢復一般進度模式！首領擊破後將自動解鎖並挺進下一區！", (255, 215, 60))
 
     def enter_gold_dungeon(self):
         self.is_gold_dungeon = True
@@ -197,7 +209,9 @@ class CombatManager:
             # 首領層 (第 10 層)：經典單一巨大首領君臨
             boss_data = scale_monster_stats(zone["boss"], self.current_floor, is_boss=True)
             boss_m = Monster(boss_data, is_boss=True)
-            boss_m.skills = get_skills_for_boss(zone["id"], boss_m.name, zone.get("boss", {}).get("skill_kit"))
+            boss_m.skills = get_skills_for_boss(
+                zone["id"], boss_m.name, zone.get("boss", {}).get("skill_kit"), rng=self.rng
+            )
             boss_m.is_enraged = False
             boss_m.shield = 0
             self.monsters = [boss_m]
@@ -206,7 +220,7 @@ class CombatManager:
         else:
             # 普通層 (第 1~9 層)：隨機生成 1~5 隻怪物群 (含菁英怪試煉)
             self.is_boss_active = False
-            wave_roll = random.random()
+            wave_roll = self.rng.random()
 
             if wave_roll < 0.20:
                 # 20% 機率：菁英怪試煉波次！(1 隻詞綴菁英怪 + 2 隻普通護衛怪)
@@ -215,8 +229,8 @@ class CombatManager:
                     ("【堅壁】", {"atk_mult": 1.05, "hp_mult": 1.7}),
                     ("【迅捷】", {"atk_mult": 1.15, "hp_mult": 1.3}),
                 ]
-                affix_name, affix_stat = random.choice(affixes)
-                m_raw = random.choice(zone["monsters"])
+                affix_name, affix_stat = self.rng.choice(affixes)
+                m_raw = self.rng.choice(zone["monsters"])
                 base_data = scale_monster_stats(m_raw, self.current_floor, is_boss=False)
 
                 elite_data = dict(base_data)
@@ -227,11 +241,11 @@ class CombatManager:
                 elite_data["elite_affix"] = affix_name
                 elite_m = Monster(elite_data, is_boss=False)
 
-                g1_data = scale_monster_stats(random.choice(zone["monsters"]), self.current_floor, is_boss=False)
+                g1_data = scale_monster_stats(self.rng.choice(zone["monsters"]), self.current_floor, is_boss=False)
                 g1_data["hp"] = int(g1_data["hp"] * 0.7)
                 g1_m = Monster(g1_data, is_boss=False)
 
-                g2_data = scale_monster_stats(random.choice(zone["monsters"]), self.current_floor, is_boss=False)
+                g2_data = scale_monster_stats(self.rng.choice(zone["monsters"]), self.current_floor, is_boss=False)
                 g2_data["hp"] = int(g2_data["hp"] * 0.7)
                 g2_m = Monster(g2_data, is_boss=False)
 
@@ -241,25 +255,25 @@ class CombatManager:
                 # 35% 機率：3 隻群怪蜂擁
                 m_list = []
                 for _ in range(3):
-                    m_data = scale_monster_stats(random.choice(zone["monsters"]), self.current_floor, is_boss=False)
+                    m_data = scale_monster_stats(self.rng.choice(zone["monsters"]), self.current_floor, is_boss=False)
                     m_data["hp"] = int(m_data["hp"] * 0.75)
                     m_list.append(Monster(m_data, is_boss=False))
                 self.monsters = m_list
             elif wave_roll < 0.80:
                 # 25% 機率：4~5 隻大群怪
-                count = random.choice([4, 5])
+                count = self.rng.choice([4, 5])
                 m_list = []
                 for _ in range(count):
-                    m_data = scale_monster_stats(random.choice(zone["monsters"]), self.current_floor, is_boss=False)
+                    m_data = scale_monster_stats(self.rng.choice(zone["monsters"]), self.current_floor, is_boss=False)
                     m_data["hp"] = int(m_data["hp"] * 0.55)
                     m_list.append(Monster(m_data, is_boss=False))
                 self.monsters = m_list
             else:
                 # 20% 機率：1~2 隻強敵對決
-                count = random.choice([1, 2])
+                count = self.rng.choice([1, 2])
                 m_list = []
                 for _ in range(count):
-                    m_data = scale_monster_stats(random.choice(zone["monsters"]), self.current_floor, is_boss=False)
+                    m_data = scale_monster_stats(self.rng.choice(zone["monsters"]), self.current_floor, is_boss=False)
                     if count == 1:
                         m_data["hp"] = int(m_data["hp"] * 1.3)
                     m_list.append(Monster(m_data, is_boss=False))
@@ -280,7 +294,7 @@ class CombatManager:
             "life": 40 if (is_crit or is_skill) else 28,
             "max_life": 40 if (is_crit or is_skill) else 28,
             "offset_y": -8,
-            "offset_x": random.uniform(-10, 10)
+            "offset_x": self.rng.uniform(-10, 10)
         })
 
     def _get_slot_pos(self, slot_idx):

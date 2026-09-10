@@ -249,7 +249,7 @@ class MainWindow(QMainWindow):
         if self.combat_mgr.current_zone_idx > 0:
             self.combat_mgr.set_zone(self.combat_mgr.current_zone_idx - 1)
             if self.combat_mgr.current_zone_idx < self.combat_mgr.unlocked_zones - 1:
-                self.combat_mgr.repeat_current_zone = True
+                self.combat_mgr.set_repeat_current_zone(True)
             self._update_repeat_button_ui()
 
     def _next_zone(self):
@@ -258,7 +258,7 @@ class MainWindow(QMainWindow):
         if self.combat_mgr.current_zone_idx + 1 < self.combat_mgr.unlocked_zones:
             self.combat_mgr.set_zone(self.combat_mgr.current_zone_idx + 1)
             if self.combat_mgr.current_zone_idx == self.combat_mgr.unlocked_zones - 1:
-                self.combat_mgr.repeat_current_zone = False
+                self.combat_mgr.set_repeat_current_zone(False)
             self._update_repeat_button_ui()
 
     def _on_combo_zone_changed(self, idx):
@@ -267,18 +267,13 @@ class MainWindow(QMainWindow):
         if 0 <= idx < self.combat_mgr.unlocked_zones and idx != self.combat_mgr.current_zone_idx:
             self.combat_mgr.set_zone(idx)
             if idx < self.combat_mgr.unlocked_zones - 1:
-                self.combat_mgr.repeat_current_zone = True
+                self.combat_mgr.set_repeat_current_zone(True)
             else:
-                self.combat_mgr.repeat_current_zone = False
+                self.combat_mgr.set_repeat_current_zone(False)
             self._update_repeat_button_ui()
 
     def _on_toggle_repeat_zone(self, checked):
-        self.combat_mgr.repeat_current_zone = checked
-        zone = self.combat_mgr.get_current_zone()
-        if checked:
-            self.combat_mgr.add_log(f"[循環刷怪] 已鎖定【{zone['name']}】！首領擊破後原地重置第 1 層刷碎片！", (100, 220, 255))
-        else:
-            self.combat_mgr.add_log(f"[推進模式] 已恢復一般進度模式！首領擊破後將自動解鎖並挺進下一區！", (255, 215, 60))
+        self.combat_mgr.set_repeat_current_zone(checked, announce=True)
         self._update_repeat_button_ui()
 
     def _on_toggle_gold_dungeon(self, checked):
@@ -530,156 +525,75 @@ class MainWindow(QMainWindow):
             self._refresh_right_panel()
 
     def _buy_shop_scroll(self, scroll_type, count=1):
-        from item_system import ABBY_SCROLLS
-        s_info = ABBY_SCROLLS.get(scroll_type)
-        if not s_info:
+        from shop_service import buy_scroll
+        result = buy_scroll(self.player, scroll_type, count)
+        if result is None:
             return
-        if scroll_type not in ["electric", "R", "innocence"]:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"提示：【{s_info.get('name', scroll_type)}】為超越神物，無法直接購買，請透過黃金轉蛋或首領掉落獲取！", (255, 120, 120))
-            return
-        cost = s_info.get("cost", 20000) * count
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！購買 {count} 張【{s_info['name']}】需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        self.player.gold -= cost
-        if not hasattr(self.player, "abby_scrolls") or self.player.abby_scrolls is None:
-            self.player.abby_scrolls = {}
-        self.player.abby_scrolls[scroll_type] = self.player.abby_scrolls.get(scroll_type, 0) + count
-        self.sound_mgr.play("levelup")
-        self.combat_mgr.add_log(f"🛒 商店購買成功：獲得【{s_info['name']}】x{count}！", (100, 240, 160))
+        success, message = result
+        self.sound_mgr.play("levelup" if success else "hit")
+        self.combat_mgr.add_log(message, (100, 240, 160) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _sell_shop_scroll(self, scroll_type, count=1):
-        from item_system import ABBY_SCROLLS
-        s_info = ABBY_SCROLLS.get(scroll_type)
-        if not s_info:
+        from shop_service import sell_scroll
+        result = sell_scroll(self.player, scroll_type, count)
+        if result is None:
             return
-        sell_prices = {
-            "electric": 30000,
-            "R": 80000,
-        }
-        sell_p = sell_prices.get(scroll_type, 0)
-        cur_stock = self.player.abby_scrolls.get(scroll_type, 0)
-        if cur_stock < count or sell_p <= 0:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"提示：庫存不足或該卷軸無法出售回收！", (255, 120, 120))
-            return
-        self.player.abby_scrolls[scroll_type] -= count
-        earned = sell_p * count
-        self.player.gold += earned
-        self.sound_mgr.play("coin")
-        self.combat_mgr.add_log(f"💰 成功出售【{s_info['name']}】x{count}！獲得 ${earned:,} 楓幣！", (255, 215, 60))
+        success, message = result
+        self.sound_mgr.play("coin" if success else "hit")
+        self.combat_mgr.add_log(message, (255, 215, 60) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _buy_shop_cube(self, cube_type, count=1):
-        from item_system import CUBE_COSTS
-        c_names = {
-            "mystic": "楓方塊",
-            "bright": "閃耀方塊",
-            "bonus_occult": "可疑附加方塊",
-            "bonus_bright": "閃耀附加方塊"
-        }
-        c_name = c_names.get(cube_type, "方塊")
-        cost = CUBE_COSTS.get(cube_type, 6000) * count
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！購買 {count} 顆【{c_name}】需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        self.player.gold -= cost
-        if not hasattr(self.player, "cube_inventory") or self.player.cube_inventory is None:
-            self.player.cube_inventory = {}
-        self.player.cube_inventory[cube_type] = self.player.cube_inventory.get(cube_type, 0) + count
-        self.sound_mgr.play("levelup")
-        self.combat_mgr.add_log(f"🛒 商店購買成功：獲得【{c_name}】x{count}！", (100, 240, 160))
+        from shop_service import buy_cube
+        success, message = buy_cube(self.player, cube_type, count)
+        self.sound_mgr.play("levelup" if success else "hit")
+        self.combat_mgr.add_log(message, (100, 240, 160) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _buy_shop_familiar_cube(self, count=1):
-        cost = 50000 * count
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！購買 {count} 顆【神奇萌獸方塊】需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        self.player.gold -= cost
-        self.player.familiar_manager.familiar_cubes += count
-        self.sound_mgr.play("levelup")
-        self.combat_mgr.add_log(f"🛒 商店購買成功：獲得【神奇萌獸方塊】x{count}！(現有: {self.player.familiar_manager.familiar_cubes} 顆)", (100, 240, 160))
+        from shop_service import buy_familiar_cube
+        success, message = buy_familiar_cube(self.player, count)
+        self.sound_mgr.play("levelup" if success else "hit")
+        self.combat_mgr.add_log(message, (100, 240, 160) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _buy_shop_basic_pet(self, pet_key):
-        from pet_system import BASIC_PET_SHOP_CATALOG, Pet
-        info = BASIC_PET_SHOP_CATALOG.get(pet_key)
-        if not info:
+        from shop_service import buy_basic_pet
+        result = buy_basic_pet(self.player, pet_key)
+        if result is None:
             return
-        cost = info["cost"]
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！購買【{info['name']}】需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        self.player.gold -= cost
-        new_pet = Pet(
-            pet_id=pet_key,
-            name=info["name"],
-            pet_type="normal",
-            auto_potion_hp=info["auto_hp"],
-            equip_name=info["equip_name"],
-            equip_atk=info["equip_atk"],
-            is_active=False
-        )
-        ok, msg = self.player.pet_manager.add_pet(new_pet)
-        self.sound_mgr.play("levelup")
-        self.combat_mgr.add_log(f"🐾 寵物購買成功：{msg}", (100, 240, 160))
+        success, message = result
+        self.sound_mgr.play("levelup" if success else "hit")
+        self.combat_mgr.add_log(message, (100, 240, 160) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _buy_shop_pet_equip(self, equip_key):
-        from pet_system import PET_EQUIP_CATALOG, LUNA_PET_EQUIP_CATALOG
-        info = PET_EQUIP_CATALOG.get(equip_key) or LUNA_PET_EQUIP_CATALOG.get(equip_key)
-        if not info:
+        from shop_service import buy_pet_equip
+        result = buy_pet_equip(self.player, equip_key)
+        if result is None:
             return
-        cost = info["cost"]
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！購買【{info['name']}】需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        pets = self.player.pet_manager.pets
-        if not pets:
-            return
-        target_pid = info.get("pet_id")
-        target_pet = None
-        if target_pid:
-            target_pet = next((p for p in pets if p.pet_id == target_pid), None)
-        if not target_pet:
-            target_pet = next((p for p in pets if p.is_active and p.equip_name != info["name"]), pets[0])
-        self.player.gold -= cost
-        ok, msg = target_pet.equip_gear(info["name"], info["atk"], info["slots"])
-        self.sound_mgr.play("levelup")
-        self.combat_mgr.add_log(f"🎀 寵物裝備購買成功：{msg}", (255, 215, 60))
+        success, message = result
+        self.sound_mgr.play("levelup" if success else "hit")
+        self.combat_mgr.add_log(message, (255, 215, 60) if success else (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 
     def _buy_shop_pet_scroll(self):
-        cost = 50000
-        if self.player.gold < cost:
-            self.sound_mgr.play("hit")
-            self.combat_mgr.add_log(f"金幣不足！強化寵物飾品需要 ${cost:,} 楓幣", (255, 120, 120))
-            return
-        active_pets = self.player.pet_manager.get_active_pets()
-        target_pet = next((p for p in active_pets if p.scroll_slots_left > 0), None)
-        if not target_pet:
-            target_pet = next((p for p in self.player.pet_manager.pets if p.scroll_slots_left > 0), None)
-        if not target_pet:
-            self.combat_mgr.add_log("目前所有寵物裝備的衝卷次數皆已耗盡！", (255, 120, 120))
-            return
-        self.player.gold -= cost
-        ok, msg = target_pet.scroll_equip()
-        self.sound_mgr.play("upgrade")
-        self.combat_mgr.add_log(f"📜 寵物卷軸強化成功：{msg}", (100, 240, 160))
+        from shop_service import buy_pet_scroll
+        success, message = buy_pet_scroll(self.player)
+        if success:
+            self.sound_mgr.play("upgrade")
+            self.combat_mgr.add_log(message, (100, 240, 160))
+        else:
+            if message.startswith("金幣不足"):
+                self.sound_mgr.play("hit")
+            self.combat_mgr.add_log(message, (255, 120, 120))
         self._update_top_bar(force=True)
         self._refresh_right_panel()
 

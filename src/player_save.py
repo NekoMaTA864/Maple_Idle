@@ -138,10 +138,13 @@ def player_load_dict(player, d: dict):
     defaults = [
         "hero", "dawn_warrior", "battle_mage", "bishop", "night_lord", "bowmaster", "buccaneer"
     ]
-    from player_data import TeamMember
+    # The supplied Player already owns TeamMember instances. Reuse their type
+    # when expanding legacy five-member saves so persistence stays independent
+    # of the player_data module.
+    team_member_type = type(player.team[0])
     while len(player.team) < 7:
         idx = len(player.team)
-        player.team.append(TeamMember(idx, defaults[idx], player))
+        player.team.append(team_member_type(idx, defaults[idx], player))
 
     if saved_team and isinstance(saved_team, list):
         for idx in range(7):
@@ -257,4 +260,3 @@ def load_player_from_file(player, filepath: str = None, combat_mgr = None) -> di
     except Exception as e:
         print(f"[Player] 讀取存檔失敗: {e}")
         return None
-

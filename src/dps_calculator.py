@@ -14,6 +14,7 @@ import os
 import time
 import argparse
 import unicodedata
+import random
 
 # 確保在 Windows 各種終端環境下輸出編碼安全
 if hasattr(sys.stdout, "reconfigure"):
@@ -195,7 +196,8 @@ def run_dps_simulation(
     dummy_def=300,
     dummy_targets=1,
     sim_dt=0.05,
-    is_boss=True
+    is_boss=True,
+    rng=None,
 ):
     """
     執行純邏輯高速戰鬥模擬
@@ -208,7 +210,7 @@ def run_dps_simulation(
     :param sim_dt: 每步時間步長 (預設 0.05 秒，即 20Hz 邏輯更新)
     :param is_boss: 是否為首領木樁 (首領木樁觸發裝備、套裝、內潛與萌獸的 BOSS傷 加成)
     """
-    combat_mgr = CombatManager(player)
+    combat_mgr = CombatManager(player, rng=rng)
     combat_mgr.configure_training_dummy(
         dummy_level, dummy_hp, attack=0, defense=dummy_def, count=dummy_targets, is_boss=is_boss
     )
