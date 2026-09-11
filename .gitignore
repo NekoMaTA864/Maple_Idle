@@ -27,6 +27,10 @@ src/scratch/
 *.swo
 Thumbs.db
 Desktop.ini
+.venv/
+.pytest_cache/
+settings/
+screenshots/
 
 # Archives & Distribution artifacts
 *.zip
