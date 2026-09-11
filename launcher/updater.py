@@ -17,12 +17,12 @@ import stat
 import sys
 import tempfile
 from typing import Callable
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 import zipfile
 
 
 GITHUB_REPOSITORY = "NekoMaTA864/Maple_Idle"
-GITHUB_API_BASE = "https://api.github.com/repos"
 USER_DATA_DIRECTORIES = {"saves", "settings", "logs", "screenshots"}
 UPDATABLE_FILES = {"VERSION", "start.bat", "update.bat"}
 UPDATABLE_DIRECTORIES = {"game"}
@@ -122,12 +122,35 @@ def read_runtime_version(root_dir: Path) -> str:
     return read_version(runtime_version)
 
 
+def latest_release_asset_url(repository: str, asset_name: str) -> str:
+    """Return GitHub's public redirect URL without using the REST API."""
+    return f"https://github.com/{repository}/releases/latest/download/{asset_name}"
+
+
+def _github_download_error(action: str, exc: Exception) -> UpdateError:
+    if isinstance(exc, HTTPError):
+        if exc.code == 404:
+            return UpdateError(
+                f"{action} was not found (HTTP 404). The latest GitHub Release may not include the required asset."
+            )
+        if exc.code == 403:
+            return UpdateError(
+                f"{action} was denied by GitHub (HTTP 403). Retry later or check that the release is public."
+            )
+        if exc.code == 429:
+            return UpdateError(f"{action} is temporarily rate limited by GitHub (HTTP 429). Retry later.")
+        return UpdateError(f"{action} failed with GitHub HTTP {exc.code}.")
+    if isinstance(exc, URLError):
+        return UpdateError(f"Network failure while requesting {action}: {exc.reason}")
+    return UpdateError(f"Network failure while requesting {action}: {exc}")
+
+
 def _read_json(url: str, opener: Callable = urlopen) -> object:
     try:
         with opener(url, timeout=20) as response:
             raw = response.read()
     except Exception as exc:
-        raise UpdateError(f"Could not contact GitHub Releases: {exc}") from exc
+        raise _github_download_error("GitHub release metadata", exc) from exc
     try:
         return json.loads(raw.decode("utf-8"))
     except (AttributeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -135,20 +158,9 @@ def _read_json(url: str, opener: Callable = urlopen) -> object:
 
 
 def fetch_latest_release(repository: str = GITHUB_REPOSITORY, opener: Callable = urlopen) -> tuple[ReleaseMetadata, str]:
-    release = _read_json(f"{GITHUB_API_BASE}/{repository}/releases/latest", opener)
-    if not isinstance(release, dict) or not isinstance(release.get("assets"), list):
-        raise UpdateError("GitHub latest release response has no asset list.")
-    asset_urls: dict[str, str] = {}
-    for asset in release["assets"]:
-        if isinstance(asset, dict) and isinstance(asset.get("name"), str) and isinstance(asset.get("browser_download_url"), str):
-            asset_urls[asset["name"]] = asset["browser_download_url"]
-    metadata_url = asset_urls.get("version.json")
-    if not isinstance(metadata_url, str):
-        raise UpdateError("The latest GitHub Release does not contain version.json.")
-    metadata = parse_release_metadata(_read_json(metadata_url, opener))
-    update_url = asset_urls.get(metadata.update_asset)
-    if not update_url:
-        raise UpdateError(f"The latest GitHub Release does not contain {metadata.update_asset}.")
+    """Read public latest-release metadata without consuming GitHub REST quota."""
+    metadata = parse_release_metadata(_read_json(latest_release_asset_url(repository, "version.json"), opener))
+    update_url = latest_release_asset_url(repository, metadata.update_asset)
     return metadata, update_url
 
 
@@ -171,7 +183,7 @@ def download_asset(url: str, destination: Path, opener: Callable = urlopen) -> N
         with opener(url, timeout=60) as response, destination.open("wb") as output:
             shutil.copyfileobj(response, output)
     except Exception as exc:
-        raise UpdateError(f"Could not download update package: {exc}") from exc
+        raise _github_download_error("GitHub update package download", exc) from exc
 
 
 def _normal_member_name(name: str) -> str:
@@ -370,9 +382,20 @@ def update_from_metadata(
     return UpdateResult("updated", f"Maple Idle was updated from {local_version} to {metadata.version}.")
 
 
-def update_from_github(root_dir: Path, repository: str = GITHUB_REPOSITORY) -> UpdateResult:
-    metadata, asset_url = fetch_latest_release(repository)
-    return update_from_metadata(root_dir, metadata, download=lambda _asset, path: download_asset(asset_url, path))
+def update_from_github(
+    root_dir: Path,
+    repository: str = GITHUB_REPOSITORY,
+    *,
+    opener: Callable = urlopen,
+    work_dir: Path | None = None,
+) -> UpdateResult:
+    metadata, asset_url = fetch_latest_release(repository, opener)
+    return update_from_metadata(
+        root_dir,
+        metadata,
+        download=lambda _asset, path: download_asset(asset_url, path, opener),
+        work_dir=work_dir,
+    )
 
 
 def main() -> int:

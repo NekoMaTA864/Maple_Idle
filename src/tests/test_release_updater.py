@@ -13,6 +13,7 @@ import shutil
 import sys
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 import zipfile
 
 
@@ -29,8 +30,12 @@ class _Response:
     def __init__(self, payload: object):
         self.payload = json.dumps(payload).encode("utf-8") if not isinstance(payload, bytes) else payload
 
-    def read(self) -> bytes:
-        return self.payload
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            payload, self.payload = self.payload, b""
+            return payload
+        payload, self.payload = self.payload[:size], self.payload[size:]
+        return payload
 
     def __enter__(self):
         return self
@@ -219,7 +224,7 @@ class TestReleaseUpdater(unittest.TestCase):
             self._apply(metadata, archive)
         self.assertEqual((self.install / "VERSION").read_text(encoding="utf-8"), "1.0.6\n")
 
-    def test_latest_release_lookup_uses_mocked_public_assets(self):
+    def test_direct_public_metadata_lookup_uses_latest_download_redirect(self):
         metadata_payload = {
             "version": "1.0.7",
             "minimum_runtime": "1.0.0",
@@ -232,14 +237,90 @@ class TestReleaseUpdater(unittest.TestCase):
 
         def fake_open(url, timeout):
             requests.append(url)
-            if url.endswith("/releases/latest"):
-                return _Response({"assets": [
-                    {"name": "version.json", "browser_download_url": "https://example.test/version.json"},
-                    {"name": "MapleIdle_Update_1.0.7.zip", "browser_download_url": "https://example.test/update.zip"},
-                ]})
+            self.assertEqual(url, "https://github.com/owner/repo/releases/latest/download/version.json")
             return _Response(metadata_payload)
 
         metadata, update_url = updater.fetch_latest_release("owner/repo", opener=fake_open)
         self.assertEqual(metadata.version, "1.0.7")
-        self.assertEqual(update_url, "https://example.test/update.zip")
-        self.assertEqual(len(requests), 2)
+        self.assertEqual(update_url, "https://github.com/owner/repo/releases/latest/download/MapleIdle_Update_1.0.7.zip")
+        self.assertEqual(len(requests), 1)
+
+    def test_direct_lookup_equal_version_reports_up_to_date_without_downloading_zip(self):
+        metadata_payload = self._metadata(self._write_update_zip(), version="1.0.6").__dict__
+        requests = []
+
+        def fake_open(url, timeout):
+            requests.append(url)
+            return _Response(metadata_payload)
+
+        result = updater.update_from_github(
+            self.install,
+            "owner/repo",
+            opener=fake_open,
+            work_dir=self.work_dir / "direct-lookup-work",
+        )
+        self.assertEqual(result.status, "up-to-date")
+        self.assertEqual(requests, ["https://github.com/owner/repo/releases/latest/download/version.json"])
+
+    def test_direct_lookup_newer_version_downloads_metadata_named_update_asset(self):
+        archive = self._write_update_zip()
+        metadata_payload = self._metadata(archive).__dict__
+        requests = []
+
+        def fake_open(url, timeout):
+            requests.append(url)
+            if url.endswith("/version.json"):
+                return _Response(metadata_payload)
+            if url.endswith(f"/{archive.name}"):
+                return _Response(archive.read_bytes())
+            self.fail(f"Unexpected URL: {url}")
+
+        result = updater.update_from_github(
+            self.install,
+            "owner/repo",
+            opener=fake_open,
+            work_dir=self.work_dir / "direct-lookup-work",
+        )
+        self.assertEqual(result.status, "updated")
+        self.assertEqual(
+            requests,
+            [
+                "https://github.com/owner/repo/releases/latest/download/version.json",
+                f"https://github.com/owner/repo/releases/latest/download/{archive.name}",
+            ],
+        )
+
+    def test_direct_metadata_404_is_actionable(self):
+        def fake_open(url, timeout):
+            raise HTTPError(url, 404, "not found", None, None)
+
+        with self.assertRaisesRegex(updater.UpdateError, "HTTP 404"):
+            updater.fetch_latest_release("owner/repo", opener=fake_open)
+
+    def test_direct_metadata_403_is_actionable(self):
+        def fake_open(url, timeout):
+            raise HTTPError(url, 403, "forbidden", None, None)
+
+        with self.assertRaisesRegex(updater.UpdateError, "HTTP 403"):
+            updater.fetch_latest_release("owner/repo", opener=fake_open)
+
+    def test_direct_metadata_429_is_actionable(self):
+        def fake_open(url, timeout):
+            raise HTTPError(url, 429, "too many requests", None, None)
+
+        with self.assertRaisesRegex(updater.UpdateError, "HTTP 429"):
+            updater.fetch_latest_release("owner/repo", opener=fake_open)
+
+    def test_direct_metadata_network_failure_is_actionable(self):
+        def fake_open(url, timeout):
+            raise URLError("offline")
+
+        with self.assertRaisesRegex(updater.UpdateError, "Network failure"):
+            updater.fetch_latest_release("owner/repo", opener=fake_open)
+
+    def test_direct_metadata_malformed_json_is_rejected(self):
+        def fake_open(url, timeout):
+            return _Response(b"{")
+
+        with self.assertRaisesRegex(updater.UpdateError, "not valid JSON"):
+            updater.fetch_latest_release("owner/repo", opener=fake_open)

@@ -1,11 +1,11 @@
 # Refactor Progress
 
 > Technical refactor and portable release pipeline completed through Milestone
-> 5. GitHub Release v1.0.6 is prepared for manual publication.
+> 5. GitHub Release v1.0.7 is prepared as an updater bootstrap hotfix.
 
 ## Current baseline
 
-- Full test suite: 129/129 PASS.
+- Full test suite: 136/136 PASS.
 - Milestone 1 — Combat Safety Net: completed.
 - Milestone 2 — UI Mutation Boundary: completed.
 - Milestone 3 Architecture Review: completed.
@@ -56,10 +56,18 @@ The sink remains an immediate adapter: combat calls it at the current call site 
 - Technical refactor completed.
 - Portable release pipeline completed.
 - Safe updater completed.
-- 129/129 tests PASS.
+- 136/136 tests PASS.
 - Full / Update packaging ready.
 - Save schema v1 ready.
 - Silent DPS ready.
-- GitHub Release v1.0.6 prepared for publication.
-- After the first manual GitHub Release and real-world updater smoke test,
-  remaining work is normal feature development only.
+- GitHub Release v1.0.6 published.
+- GitHub Release v1.0.7 prepared as an updater bootstrap hotfix.
+- Remaining work after publishing and smoke-testing v1.0.7 is normal feature
+  development only.
+
+## v1.0.7 updater bootstrap hotfix
+
+- Fix updater HTTP 403 caused by GitHub unauthenticated REST API rate limits.
+- Update checks now use the public `releases/latest/download/version.json`
+  release-asset path instead of GitHub REST latest-release lookup.
+- No gameplay changes.
