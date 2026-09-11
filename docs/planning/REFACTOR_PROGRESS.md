@@ -1,7 +1,7 @@
 # Refactor Progress
 
-> Technical refactor completed through Milestone 5. The remaining release work
-> is a first manual GitHub Release and a real-world updater smoke test.
+> Technical refactor and portable release pipeline completed through Milestone
+> 5. GitHub Release v1.0.6 is prepared for manual publication.
 
 ## Current baseline
 
@@ -46,9 +46,20 @@ The sink remains an immediate adapter: combat calls it at the current call site 
 - Gameplay/Silent domain and RNG parity are covered by characterization tests.
 - Legacy `CombatManager` presentation-facing façade remains compatible for the existing UI.
 
-## Release status
+## Final Status
 
-- Full and Update portable ZIPs, SHA-256 checksums, `version.json`, and the
-  safe foreground updater are implemented and covered by tests.
-- Remaining task: manually publish the first GitHub Release, then smoke-test
-  `start.bat` and `update.bat` from a clean extracted Full package.
+- Milestone 1 completed.
+- Milestone 2 completed.
+- Milestone 3 completed.
+- Milestone 4 completed.
+- Milestone 5 completed.
+- Technical refactor completed.
+- Portable release pipeline completed.
+- Safe updater completed.
+- 129/129 tests PASS.
+- Full / Update packaging ready.
+- Save schema v1 ready.
+- Silent DPS ready.
+- GitHub Release v1.0.6 prepared for publication.
+- After the first manual GitHub Release and real-world updater smoke test,
+  remaining work is normal feature development only.
