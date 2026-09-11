@@ -4,8 +4,8 @@ import ast
 import json
 import os
 import sys
-import unittest
 from pathlib import Path
+import unittest
 from unittest.mock import mock_open, patch
 
 SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +36,7 @@ class TestPlayerSaveCharacterization(unittest.TestCase):
         self.assertEqual(data["inventory"], [])
         self.assertEqual(set(data["equipped"]), set(player.equipped))
         self.assertIn("last_save_time", data)
-        self.assertNotIn("schema_version", data)
+        self.assertEqual(data["schema_version"], 1)
 
     def test_round_trip_preserves_current_equipment_inventory_progression_party_skills_and_symbols(self):
         player = Player()
@@ -136,21 +136,34 @@ class TestPlayerSaveCharacterization(unittest.TestCase):
         self.assertEqual(os.path.basename(os.path.dirname(path)), "saves")
         self.assertEqual(os.path.basename(os.path.dirname(os.path.dirname(path))), "src")
 
+    def test_release_save_dir_environment_override_keeps_packaged_saves_outside_game(self):
+        with patch.dict(os.environ, {"MAPLE_IDLE_SAVE_DIR": r"C:\\release\\saves"}), patch(
+            "player_save.os.makedirs"
+        ) as make_dirs:
+            path = get_default_save_path()
+
+        self.assertEqual(path, r"C:\\release\\saves\savegame.json")
+        make_dirs.assert_called_once_with(r"C:\\release\\saves", exist_ok=True)
+
     def test_file_round_trip_and_player_facade_keep_current_delegation(self):
         player = Player()
         player.gold = 12345
-        path = "player.json"
-        with patch("builtins.open", mock_open()) as write_open:
+        path = os.path.join(SRC_DIR, ".player_save_characterization_test.json")
+        for suffix in ("", ".bak", ".tmp"):
+            candidate = Path(f"{path}{suffix}")
+            if candidate.exists():
+                candidate.unlink()
+        try:
             self.assertTrue(save_player_to_file(player, path))
-            write_open.assert_called_once_with(path, "w", encoding="utf-8")
 
-        serialized = json.dumps(player_to_dict(player))
-        with patch("player_save.os.path.exists", return_value=True), patch(
-            "builtins.open", mock_open(read_data=serialized)
-        ):
             restored = Player()
             self.assertIsNone(load_player_from_file(restored, path))
             self.assertEqual(restored.gold, 12345)
+        finally:
+            for suffix in ("", ".bak", ".tmp"):
+                candidate = Path(f"{path}{suffix}")
+                if candidate.exists():
+                    candidate.unlink()
 
         with patch("player_data.player_save.player_to_dict", return_value={"delegated": True}) as to_dict:
             self.assertEqual(player.to_dict(), {"delegated": True})

@@ -4,6 +4,7 @@
 
 import os
 import json
+import shutil
 import time
 from item_system import Item, SLOT_NAMES
 from classes import ALL_CLASSES
@@ -11,8 +12,88 @@ from player_symbols import ARC_SYMBOLS_DATA, AUT_SYMBOLS_DATA
 from player_offline import settle_offline_progression
 
 
+SCHEMA_VERSION = 1
+
+
+def migrate_v0_to_v1(data: dict) -> dict:
+    """Add the first explicit schema marker without reshaping legacy saves."""
+    migrated = dict(data)
+    migrated["schema_version"] = 1
+    return migrated
+
+
+MIGRATIONS = {
+    0: migrate_v0_to_v1,
+}
+
+
+def migrate_save_data(data: dict) -> dict:
+    """Migrate a legacy save sequentially to the current schema version."""
+    if not isinstance(data, dict):
+        raise ValueError("Save root must be a JSON object")
+
+    version = data.get("schema_version", 0)
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise ValueError("Save schema_version must be an integer")
+    if version > SCHEMA_VERSION or version < 0:
+        raise ValueError(f"Unsupported save schema version: {version}")
+
+    migrated = data
+    while version < SCHEMA_VERSION:
+        migration = MIGRATIONS.get(version)
+        if migration is None:
+            raise ValueError(f"No migration path from save schema version: {version}")
+        migrated = migration(migrated)
+        version = migrated["schema_version"]
+    return migrated
+
+
+def validate_save_data(data: dict) -> None:
+    """Validate root fields before applying a save to Player state."""
+    if not isinstance(data, dict):
+        raise ValueError("Save root must be a JSON object")
+    if data.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported save schema version: {data.get('schema_version')}")
+
+    numeric_fields = ("level", "exp", "gold", "stat_atk", "stat_def", "stat_hp", "stat_crit", "free_points", "last_save_time")
+    for field in numeric_fields:
+        if field in data and (not isinstance(data[field], (int, float)) or isinstance(data[field], bool)):
+            raise ValueError(f"Save field '{field}' must be numeric")
+
+    if "name" in data and not isinstance(data["name"], str):
+        raise ValueError("Save field 'name' must be a string")
+
+    collection_types = {
+        "team_classes": list,
+        "team": list,
+        "team_skills": list,
+        "equipped": dict,
+        "inventory": list,
+        "slot_enhancements": dict,
+        "slot_potentials": dict,
+        "slot_scrolls": dict,
+        "abby_scrolls": dict,
+        "cube_inventory": dict,
+        "arc_symbols": dict,
+        "aut_symbols": dict,
+        "symbol_fragments": dict,
+    }
+    for field, expected_type in collection_types.items():
+        if field in data and not isinstance(data[field], expected_type):
+            raise ValueError(f"Save field '{field}' must be a {expected_type.__name__}")
+
+    for field in ("inner_ability", "pet_manager", "familiar_manager"):
+        if field in data and data[field] is not None and not isinstance(data[field], dict):
+            raise ValueError(f"Save field '{field}' must be an object or null")
+
+
 def get_default_save_path() -> str:
     """解析存檔路徑：預設儲存於 src/saves/savegame.json"""
+    release_saves_dir = os.environ.get("MAPLE_IDLE_SAVE_DIR")
+    if release_saves_dir:
+        os.makedirs(release_saves_dir, exist_ok=True)
+        return os.path.join(release_saves_dir, "savegame.json")
+
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     saves_dir = os.path.join(cur_dir, "saves")
     os.makedirs(saves_dir, exist_ok=True)
@@ -24,6 +105,7 @@ def player_to_dict(player) -> dict:
     from player_gear import ensure_player_slots
     ensure_player_slots(player)
     return {
+        "schema_version": SCHEMA_VERSION,
         "name": player.name,
         "level": player.level,
         "exp": player.exp,
@@ -55,6 +137,9 @@ def player_to_dict(player) -> dict:
 def player_load_dict(player, d: dict):
     """從字典還原玩家數據（支援舊存檔無損遷移至 25 格、欄位潛能與艾比卷軸）"""
     from player_gear import ensure_player_slots
+
+    d = migrate_save_data(d)
+    validate_save_data(d)
 
     player.name = d.get("name", player.name)
     player.level = d.get("level", player.level)
@@ -214,8 +299,20 @@ def save_player_to_file(player, filepath: str = None, combat_mgr = None) -> bool
             data["unlocked_zones"] = combat_mgr.unlocked_zones
             data["current_zone_idx"] = combat_mgr.current_zone_idx
             data["current_floor"] = combat_mgr.current_floor
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        temp_path = f"{filepath}.tmp"
+        try:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+
+            if os.path.exists(filepath):
+                shutil.copy2(filepath, f"{filepath}.bak")
+            os.replace(temp_path, filepath)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
         return True
     except Exception as e:
         print(f"[Player] 存檔失敗: {e}")
@@ -244,6 +341,8 @@ def load_player_from_file(player, filepath: str = None, combat_mgr = None) -> di
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        data = migrate_save_data(data)
+        validate_save_data(data)
         player_load_dict(player, data)
         saved_time = float(data.get("last_save_time", time.time()))
 

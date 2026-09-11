@@ -5,6 +5,19 @@ import random
 # Backward-compatible re-export. PendingHit is a combat payload, not VFX state.
 from combat_events import PendingHit
 
+
+def sample_visual_variation(kind):
+    """Consume and return the random inputs used by one visual effect."""
+    seed = random.uniform(0, 6.28)
+    fractures = []
+    if kind == "dimension_rift":
+        for _ in range(6):
+            angle = random.uniform(0, math.pi * 2)
+            length = random.uniform(50, 110)
+            mid_ang = angle + random.uniform(-0.4, 0.4)
+            fractures.append((angle, length, mid_ang))
+    return seed, fractures
+
 class VisualEffect:
     def __init__(self, kind, x, y, target_x=None, target_y=None, color=(255, 255, 255), duration=0.45,
                  source_slot=None, target_monster_idx=None, target_slot=None):
@@ -16,17 +29,14 @@ class VisualEffect:
         self.color = color
         self.duration = duration
         self.timer = duration
-        self.seed = random.uniform(0, 6.28)
+        self.seed, fracture_variations = sample_visual_variation(kind)
         self.source_slot = source_slot
         self.target_monster_idx = target_monster_idx
         self.target_slot = target_slot
         self.fracture_lines = []
         if self.kind == "dimension_rift":
-            for _ in range(6):
-                angle = random.uniform(0, math.pi * 2)
-                length = random.uniform(50, 110)
+            for angle, length, mid_ang in fracture_variations:
                 mid_len = length * 0.5
-                mid_ang = angle + random.uniform(-0.4, 0.4)
                 p_start = (self.target_x, self.target_y)
                 p_mid = (self.target_x + math.cos(mid_ang) * mid_len, self.target_y + math.sin(mid_ang) * mid_len)
                 p_end = (self.target_x + math.cos(angle) * length, self.target_y + math.sin(angle) * length)

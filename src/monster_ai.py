@@ -46,14 +46,14 @@ def process_monster_attack(combat_mgr, m, sound_mgr):
 
     hp_lost, absorbed = target.take_damage(dmg)
     combat_mgr.combat_stats.record_damage_taken(0, hp_lost, absorbed)
-    sound_mgr.play("hit")
-    if len(combat_mgr.shake_team) > 0:
-        combat_mgr.shake_team[0] = 7.0
+    combat_mgr.play_sound(sound_mgr, "hit")
+    if combat_mgr.player.team:
+        combat_mgr.set_shake("team", 7.0, index=0)
 
     m_idx = combat_mgr.monsters.index(m) if m in combat_mgr.monsters else 0
     m_pos = combat_mgr._get_monster_pos(m_idx, len(combat_mgr.monsters))
     t_pos = combat_mgr._get_slot_pos(0)
-    combat_mgr.vfx_mgr.add_vfx("slash", m_pos[0], m_pos[1], t_pos[0], t_pos[1], COLOR_HP_RED,
+    combat_mgr.emit_vfx("slash", m_pos[0], m_pos[1], t_pos[0], t_pos[1], COLOR_HP_RED,
                          source_slot=m_idx, target_slot=0)
 
     if absorbed > 0:
@@ -81,14 +81,14 @@ def execute_monster_skill(combat_mgr, skill, alive_members, sound_mgr, boss_mons
 
     combat_mgr.add_popup(f"【{skill.name}】", f"monster_{m_idx}", vfx_col, is_skill=True)
     combat_mgr.add_log(f"⚡ 首領 [{m.name}] 施展【{skill.name}】！{cast_desc}", vfx_col)
-    sound_mgr.play("crit")
+    combat_mgr.play_sound(sound_mgr, "crit")
 
     target_type = getattr(skill, "target_type", "damage")
     if target_type == "self_shield":
         sh_val = getattr(skill, "shield_val", 500)
         m.shield += sh_val
         combat_mgr.add_popup(f"[暗影護盾 +{sh_val}]", f"monster_{m_idx}", COLOR_SHIELD_BLUE, is_skill=True)
-        combat_mgr.vfx_mgr.add_vfx(vfx_kind, m_pos[0], m_pos[1], color=vfx_col,
+        combat_mgr.emit_vfx(vfx_kind, m_pos[0], m_pos[1], color=vfx_col,
                              source_slot=m_idx, target_monster_idx=m_idx)
         return
 
@@ -96,7 +96,7 @@ def execute_monster_skill(combat_mgr, skill, alive_members, sound_mgr, boss_mons
         debuff_dur = getattr(skill, "debuff_duration", 5.0)
         combat_mgr.player.apply_team_buff("boss_curse", "atk", -0.25, debuff_dur, f"{m.name}詛咒")
         combat_mgr.add_popup("[虛弱 -25%]", "slot_0", (180, 80, 255), is_skill=True)
-        combat_mgr.vfx_mgr.add_vfx(vfx_kind, m_pos[0], m_pos[1], color=vfx_col,
+        combat_mgr.emit_vfx(vfx_kind, m_pos[0], m_pos[1], color=vfx_col,
                              source_slot=m_idx)
         return
 
@@ -121,19 +121,19 @@ def execute_monster_skill(combat_mgr, skill, alive_members, sound_mgr, boss_mons
     # 震動與全場特效
     is_aoe = (target_type == "aoe_all" or getattr(skill, "is_aoe", False))
     if is_aoe:
-        combat_mgr.shake_monster = 10.0
-        for idx in range(len(combat_mgr.shake_team)):
-            combat_mgr.shake_team[idx] = 9.0
+        combat_mgr.set_shake("monster", 10.0)
+        for idx in range(len(combat_mgr.player.team)):
+            combat_mgr.set_shake("team", 9.0, index=idx)
         # 全屏 AOE 特效波及全場
         for m_slot in range(len(combat_mgr.player.team)):
             t_pos = combat_mgr._get_slot_pos(m_slot)
-            combat_mgr.vfx_mgr.add_vfx(vfx_kind, m_pos[0], m_pos[1], t_pos[0], t_pos[1], vfx_col,
+            combat_mgr.emit_vfx(vfx_kind, m_pos[0], m_pos[1], t_pos[0], t_pos[1], vfx_col,
                                  source_slot=m_idx, target_slot=m_slot)
     else:
-        if len(combat_mgr.shake_team) > 0:
-            combat_mgr.shake_team[0] = 8.0
+        if combat_mgr.player.team:
+            combat_mgr.set_shake("team", 8.0, index=0)
         t_pos = combat_mgr._get_slot_pos(0)
-        combat_mgr.vfx_mgr.add_vfx(vfx_kind, m_pos[0], m_pos[1], t_pos[0], t_pos[1], vfx_col,
+        combat_mgr.emit_vfx(vfx_kind, m_pos[0], m_pos[1], t_pos[0], t_pos[1], vfx_col,
                              source_slot=m_idx, target_slot=0)
 
     if absorbed > 0:

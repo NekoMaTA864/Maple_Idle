@@ -22,18 +22,18 @@ def execute_pending_hit(combat_mgr, hit, sound_mgr):
 
     m_pos = combat_mgr._get_monster_pos(m_idx, len(combat_mgr.monsters))
     origin_pos = combat_mgr._get_slot_pos(hit.member.slot_idx)
-    combat_mgr.vfx_mgr.add_vfx(
+    combat_mgr.emit_vfx(
         hit.vfx_type, origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], hit.vfx_color,
         source_slot=hit.member.slot_idx, target_monster_idx=m_idx
     )
 
-    combat_mgr.shake_monster = 7.0 if hit.is_crit else 4.0
+    combat_mgr.set_shake("monster", 7.0 if hit.is_crit else 4.0)
     combat_mgr.add_popup(f"暴擊! {dmg}" if hit.is_crit else f"-{dmg}", f"monster_{m_idx}", COLOR_GOLD if hit.is_crit else (255, 240, 180), is_crit=hit.is_crit)
 
     if hit.is_crit:
-        sound_mgr.play("crit")
+        combat_mgr.play_sound(sound_mgr, "crit")
     else:
-        sound_mgr.play("hit")
+        combat_mgr.play_sound(sound_mgr, "hit")
 
     if not any(m.is_alive for m in combat_mgr.monsters):
         combat_mgr._on_monster_killed(sound_mgr)
@@ -105,7 +105,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
                     target.current_hp = min(target.get_max_hp(p), target.current_hp + heal_amt)
                     total_healed += int(target.current_hp - before_hp)
                     target_pos = combat_mgr._get_slot_pos(target.slot_idx)
-                    combat_mgr.vfx_mgr.add_vfx("heal", target_pos[0], target_pos[1], color=COLOR_HEAL_GREEN)
+                    combat_mgr.emit_vfx("heal", target_pos[0], target_pos[1], color=COLOR_HEAL_GREEN)
                     combat_mgr.add_popup(f"+{heal_amt} HP", f"slot_{target.slot_idx}", COLOR_HEAL_GREEN, is_skill=True)
                 combat_mgr.combat_stats.record_healing(member.slot_idx, total_healed, cast=True)
                 combat_mgr.add_log(f"[{member.name}] 施展【{used_skill.name}】，為遠征隊全員恢復生命！", COLOR_HEAL_GREEN)
@@ -116,11 +116,11 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
                 target.current_hp = min(target.get_max_hp(p), target.current_hp + heal_amt)
                 combat_mgr.combat_stats.record_healing(member.slot_idx, int(target.current_hp - before_hp), cast=True)
                 target_pos = combat_mgr._get_slot_pos(target.slot_idx)
-                combat_mgr.vfx_mgr.add_vfx("heal", target_pos[0], target_pos[1], color=COLOR_HEAL_GREEN)
+                combat_mgr.emit_vfx("heal", target_pos[0], target_pos[1], color=COLOR_HEAL_GREEN)
                 combat_mgr.add_popup(f"+{heal_amt} HP", f"slot_{target.slot_idx}", COLOR_HEAL_GREEN, is_skill=True)
                 combat_mgr.add_log(f"[{member.name}] 施展【{used_skill.name}】，為 [{target.name}] 恢復 {heal_amt} 生命！", COLOR_HEAL_GREEN)
             used_skill.trigger()
-            sound_mgr.play("hit")
+            combat_mgr.play_sound(sound_mgr, "hit")
             return
 
     # 特殊技能機制 2：全隊光環增益 (TEAM_BUFF) / 個人專屬增益 (SELF_BUFF)
@@ -138,7 +138,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
         duration = getattr(used_skill, "buff_duration", 8.0) * buff_duration_mult
         p.apply_team_buff(used_skill.skill_id, buff_type, buff_val, duration, member.name, source_slot_idx=member.slot_idx)
         combat_mgr.combat_stats.record_buff(member.slot_idx)
-        combat_mgr.vfx_mgr.add_vfx("holy", origin_pos[0], origin_pos[1], color=used_skill.color)
+        combat_mgr.emit_vfx("holy", origin_pos[0], origin_pos[1], color=used_skill.color)
         combat_mgr.add_popup(f"[{used_skill.name}]", f"slot_{member.slot_idx}", used_skill.color, is_skill=True)
         combat_mgr.add_log(f"[{member.name}] 吟唱【{used_skill.name}】！全隊獲得【{used_skill.tag_name}】戰力大增！", used_skill.color)
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
@@ -146,13 +146,13 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
             combat_mgr.add_popup("[無冷!]", f"slot_{member.slot_idx}", (255, 215, 0), is_skill=True)
         else:
             used_skill.trigger()
-        sound_mgr.play("levelup")
+        combat_mgr.play_sound(sound_mgr, "levelup")
     elif used_skill and sk_type in ["self_buff"]:
         buff_duration_mult = 1.0 + getattr(p, "get_inner_ability_stat", lambda k: 0.0)("buff_duration")
         duration = getattr(used_skill, "buff_duration", 8.5) * buff_duration_mult
         member.is_buffed = True
         member.buff_timer = duration
-        combat_mgr.vfx_mgr.add_vfx("holy", origin_pos[0], origin_pos[1], color=used_skill.color)
+        combat_mgr.emit_vfx("holy", origin_pos[0], origin_pos[1], color=used_skill.color)
         combat_mgr.add_popup(f"[{used_skill.name}]", f"slot_{member.slot_idx}", used_skill.color, is_skill=True)
         combat_mgr.add_log(f"[{member.name}] 施展【{used_skill.name}】！獲得個人專屬強化！", used_skill.color)
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
@@ -160,7 +160,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
             combat_mgr.add_popup("[無冷!]", f"slot_{member.slot_idx}", (255, 215, 0), is_skill=True)
         else:
             used_skill.trigger()
-        sound_mgr.play("levelup")
+        combat_mgr.play_sound(sound_mgr, "levelup")
 
     # 判定是否為 AOE 全屏/群體橫掃技能
     is_aoe = is_skill_aoe(used_skill)
@@ -174,7 +174,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
             m_idx = combat_mgr.monsters.index(m)
             combat_mgr.combat_stats.record_control(member.slot_idx)
             m_pos = combat_mgr._get_monster_pos(m_idx, len(combat_mgr.monsters))
-            combat_mgr.vfx_mgr.add_vfx("ice", origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], (140, 230, 255),
+            combat_mgr.emit_vfx("ice", origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], (140, 230, 255),
                                  source_slot=member.slot_idx, target_monster_idx=m_idx)
             combat_mgr.add_popup(f"[極寒凍結 {freeze_dur:.1f}s]", f"monster_{m_idx}", (140, 230, 255), is_skill=True)
         combat_mgr.add_log(f"[{member.name}] 施展【{used_skill.name}】！{'全體' if is_aoe else ''}怪物行動被極寒徹底凍結！", (140, 230, 255))
@@ -186,7 +186,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
         member.mechanic_stacks = 0
         primary_m_idx = combat_mgr.monsters.index(alive_monsters[0])
         m_pos = combat_mgr._get_monster_pos(primary_m_idx, len(combat_mgr.monsters))
-        combat_mgr.vfx_mgr.add_vfx("explosion", origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], used_skill.color,
+        combat_mgr.emit_vfx("explosion", origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], used_skill.color,
                              source_slot=member.slot_idx, target_monster_idx=primary_m_idx)
     else:
         member.mechanic_stacks = min(5, member.mechanic_stacks + 1)
@@ -345,7 +345,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
 
         m_idx = combat_mgr.monsters.index(target_m)
         m_pos = combat_mgr._get_monster_pos(m_idx, len(combat_mgr.monsters))
-        combat_mgr.vfx_mgr.add_vfx(
+        combat_mgr.emit_vfx(
             eff_kind, origin_pos[0], origin_pos[1], m_pos[0], m_pos[1], vfx_color,
             source_slot=member.slot_idx, target_monster_idx=m_idx
         )
@@ -366,7 +366,7 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
                     target_monster_idx=m_idx
                 ))
 
-    combat_mgr.shake_monster = 8.0 if any_crit else 4.0
+    combat_mgr.set_shake("monster", 8.0 if any_crit else 4.0)
 
     if used_skill:
         cd_skip = getattr(p, "get_inner_ability_stat", lambda k: 0.0)("cooldown_skip")
@@ -381,9 +381,9 @@ def execute_member_attack(combat_mgr, member, sound_mgr, specific_skill=None, fo
         combat_mgr.add_log(f"[{member.name}] 普攻命中，造成 {total_dmg_dealt} 點{'暴擊' if any_crit else ''}傷害。", COLOR_GOLD if any_crit else COLOR_TEXT_MAIN)
 
     if any_crit:
-        sound_mgr.play("crit")
+        combat_mgr.play_sound(sound_mgr, "crit")
     else:
-        sound_mgr.play("hit")
+        combat_mgr.play_sound(sound_mgr, "hit")
 
     # 吸血判定
     lifesteal = p.life_steal + (used_skill.lifesteal_bonus if used_skill else 0.0)

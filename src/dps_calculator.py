@@ -36,6 +36,7 @@ if CURRENT_DIR not in sys.path:
 from classes import ALL_CLASSES, get_class_info
 from player_data import Player, TeamMember
 from combat_system import CombatManager
+from combat_output import SilentCombatOutput
 from player_save import load_player_from_file
 from inner_ability import InnerAbilityLine
 from familiar_system import Familiar, FamiliarLine
@@ -210,7 +211,7 @@ def run_dps_simulation(
     :param sim_dt: 每步時間步長 (預設 0.05 秒，即 20Hz 邏輯更新)
     :param is_boss: 是否為首領木樁 (首領木樁觸發裝備、套裝、內潛與萌獸的 BOSS傷 加成)
     """
-    combat_mgr = CombatManager(player, rng=rng)
+    combat_mgr = CombatManager(player, rng=rng, output=SilentCombatOutput())
     combat_mgr.configure_training_dummy(
         dummy_level, dummy_hp, attack=0, defense=dummy_def, count=dummy_targets, is_boss=is_boss
     )

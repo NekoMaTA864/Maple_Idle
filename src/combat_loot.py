@@ -24,7 +24,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             gold_award = int(3_500_000 + min(1.0, (p_lvl - 200) / 100.0) * 2_500_000)
 
         combat_mgr.player.add_gold(gold_award)
-        sound_mgr.play("coin")
+        combat_mgr.play_sound(sound_mgr, "coin")
         combat_mgr.add_popup(f"[黃金寶庫 +${gold_award:,}]", "monster_0", (255, 215, 0))
         combat_mgr.add_log(f"[黃金寶庫] 成功擊破黃金寶箱怪！獲得楓幣 ${gold_award:,}！（金庫不提供經驗值）", COLOR_GOLD)
         combat_mgr._spawn_gold_dungeon_monster()
@@ -48,7 +48,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
         combat_mgr.add_log(f"[討伐] 成功殲滅怪物波次，獲得 {total_exp} EXP、{total_gold} 金幣！", COLOR_GOLD)
 
     if leveled_up:
-        sound_mgr.play("levelup")
+        combat_mgr.play_sound(sound_mgr, "levelup")
         combat_mgr.add_log(f"[升級] 遠征隊升級至 Lv.{combat_mgr.player.level}！獲得 4 點核心自由點數！", (60, 240, 130))
 
     # 掉落神裝 (適度調降掉落頻率，延長遊戲進度：首領 85%，菁英怪 25%，普通怪 7% + 裝備/內潛掉寶率)
@@ -71,7 +71,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             source_type=source_type,
         )
         if combat_mgr.player.add_to_inventory(loot):
-            sound_mgr.play("loot")
+            combat_mgr.play_sound(sound_mgr, "loot")
             combat_mgr.add_log(f"[神裝] 獲得珍貴掉落：{loot.full_name} (需求 Lv.{loot.level_req})！", loot.color)
         else:
             combat_mgr.add_log(f"[背包] 背包已滿，未能拾取 {loot.full_name}。", (220, 120, 120))
@@ -85,12 +85,12 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             s_name = "黑卷B" if s_roll == "B" else f"{s_roll}卷"
             combat_mgr.player.abby_scrolls[s_roll] = combat_mgr.player.abby_scrolls.get(s_roll, 0) + 1
             combat_mgr.add_log(f"[首領秘寶] 討伐首領大捷！斬獲神級【艾比{s_name} x1】！已存入庫存！", (255, 215, 0))
-            sound_mgr.play("loot")
+            combat_mgr.play_sound(sound_mgr, "loot")
         elif b_lvl >= 100 and combat_mgr.rng.random() < 0.35:
             s_roll = combat_mgr.rng.choice(["X", "R"])
             combat_mgr.player.abby_scrolls[s_roll] = combat_mgr.player.abby_scrolls.get(s_roll, 0) + 1
             combat_mgr.add_log(f"[首領秘寶] 討伐首領大捷！獲得稀有【艾比{s_roll}卷 x1】！已存入庫存！", (200, 220, 255))
-            sound_mgr.play("loot")
+            combat_mgr.play_sound(sound_mgr, "loot")
         elif combat_mgr.rng.random() < 0.30:
             s_roll = combat_mgr.rng.choice(["R", "electric"])
             s_name = "極電卷" if s_roll == "electric" else "宿命R卷"
@@ -109,7 +109,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             seed_name = combat_mgr.rng.choice(["規範之戒", "持續之戒", "武器泡泡之戒"])
             seed_ring = create_seed_ring(seed_name)
             if combat_mgr.player.add_to_inventory(seed_ring):
-                sound_mgr.play("loot")
+                combat_mgr.play_sound(sound_mgr, "loot")
                 combat_mgr.add_log(f"[首領神兵] 討伐首領大捷！幸運斬獲起源之塔特殊神戒【{seed_ring.full_name}】！已存入行囊！", (255, 120, 180))
             else:
                 combat_mgr.add_log(f"[背包] 背包已滿，未能拾取首領掉落的【{seed_ring.base_name}】。", (220, 120, 120))
@@ -137,7 +137,7 @@ def handle_monster_killed(combat_mgr, sound_mgr):
             from familiar_system import drop_stage_familiar, FAMILIAR_TIER_NAMES
             new_fam = drop_stage_familiar(is_boss=is_boss, has_elite=has_elite)
             combat_mgr.player.familiar_manager.add_familiar(new_fam)
-            sound_mgr.play("loot")
+            combat_mgr.play_sound(sound_mgr, "loot")
             t_name = FAMILIAR_TIER_NAMES.get(new_fam.tier, new_fam.tier)
             combat_mgr.add_log(f"[萌獸捕獲] 斬獲野生萌獸【{new_fam.name} ({t_name})】！已存入萌獸卡冊，可用於吞噬升階！", (180, 240, 200))
             combat_mgr.add_popup(f"[{new_fam.name}]", "monster_0", (180, 240, 200))

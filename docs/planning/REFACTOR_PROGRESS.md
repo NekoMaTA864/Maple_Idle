@@ -1,14 +1,17 @@
-# Refactor Progress Checkpoint
+# Refactor Progress
 
-> Checkpoint: before Milestone 3 Combat Output Boundary implementation.
+> Technical refactor completed through Milestone 5. The remaining release work
+> is a first manual GitHub Release and a real-world updater smoke test.
 
 ## Current baseline
 
-- Full test suite: 84/84 PASS.
+- Full test suite: 129/129 PASS.
 - Milestone 1 — Combat Safety Net: completed.
 - Milestone 2 — UI Mutation Boundary: completed.
 - Milestone 3 Architecture Review: completed.
-- Milestone 3 implementation: **not started**.
+- Milestone 3 Combat Output Boundary: completed.
+- Milestone 4 — Façade Stabilization: completed.
+- Milestone 5 — Persistence and Portable Release Hardening: completed.
 
 ## Milestone 3 accepted design
 
@@ -23,10 +26,10 @@ The sink remains an immediate adapter: combat calls it at the current call site 
 
 ## Migration sequence
 
-1. **3A — Output-order characterization**
-2. **3B — VFX / audio sink**
-3. **3C — Popup / log / shake ownership**
-4. **3D — Silent DPS**
+1. **3A — Output-order characterization**: completed.
+2. **3B — VFX / audio sink**: completed.
+3. **3C — Popup / log / shake ownership**: completed.
+4. **3D — Silent DPS**: completed.
 
 ## Critical regression risks
 
@@ -36,8 +39,16 @@ The sink remains an immediate adapter: combat calls it at the current call site 
 - Side effects must remain synchronous.
 - Battle tick order, `PendingHit` ordering, and kill -> loot -> spawn ordering must not change.
 
-## Next action
+## Milestone 3 result
 
-Start **Slice 3A — Output-order characterization**.
+- `GameplayCombatOutput` owns VFX, popup, log, and shake presentation state.
+- `SilentCombatOutput` runs DPS headlessly without presentation collections while preserving visual and popup RNG consumption.
+- Gameplay/Silent domain and RNG parity are covered by characterization tests.
+- Legacy `CombatManager` presentation-facing façade remains compatible for the existing UI.
 
-Do not start Slice 3B until the 3A characterization tests are complete and passing.
+## Release status
+
+- Full and Update portable ZIPs, SHA-256 checksums, `version.json`, and the
+  safe foreground updater are implemented and covered by tests.
+- Remaining task: manually publish the first GitHub Release, then smoke-test
+  `start.bat` and `update.bat` from a clean extracted Full package.

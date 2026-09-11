@@ -18,6 +18,7 @@ from combat_vfx_manager import (
     VisualEffect, _get_vfx_priority, HIGH_PRIORITY_VFX,
     VisualEffectManager
 )
+from combat_output import GameplayCombatOutput
 from combat_events import PendingHit
 from monster import Monster, get_skill_priority
 from combat_loot import handle_monster_killed
@@ -31,7 +32,7 @@ __all__ = [
 
 
 class CombatManager:
-    def __init__(self, player, rng=None):
+    def __init__(self, player, rng=None, output=None):
         self.player = player
         # Defaulting to the existing module keeps production RNG distribution and call order.
         self.rng = random if rng is None else rng
@@ -49,19 +50,10 @@ class CombatManager:
         self.training_dummy_config = None
         self.is_gold_dungeon = False
 
-        # 特效管理器與多段延遲隊列
-        self.vfx_mgr = VisualEffectManager()
+        # Presentation state is owned by output; legacy access stays on this facade.
+        self.output = GameplayCombatOutput(team_size=len(self.player.team)) if output is None else output
         self.pending_hits = []
         self.combat_stats = CombatStats(len(self.player.team))
-
-        # 震動反饋與浮空飄字
-        self.shake_team = [0.0] * len(self.player.team)
-        self.shake_monster = 0.0
-        self.floating_popups = []
-
-        # 戰鬥即時文字日誌
-        self.combat_logs = []
-        self.max_logs = 120
 
         # 隊伍團滅休整倒數
         self.is_resting = False
@@ -71,6 +63,63 @@ class CombatManager:
         self.boss_miasma_timer = 0.0
 
         self.spawn_next_monster()
+
+    def emit_vfx(self, *args, **kwargs):
+        return self.output.vfx(*args, **kwargs)
+
+    def play_sound(self, sound_mgr, cue):
+        return self.output.play_sound(sound_mgr, cue)
+
+    def set_shake(self, target, value, index=None):
+        return self.output.set_shake(target, value, index=index)
+
+    @property
+    def vfx_mgr(self):
+        return self.output.vfx_mgr
+
+    @vfx_mgr.setter
+    def vfx_mgr(self, value):
+        self.output.vfx_mgr = value
+
+    @property
+    def floating_popups(self):
+        return self.output.floating_popups
+
+    @floating_popups.setter
+    def floating_popups(self, value):
+        self.output.floating_popups = value
+
+    @property
+    def combat_logs(self):
+        return self.output.combat_logs
+
+    @combat_logs.setter
+    def combat_logs(self, value):
+        self.output.combat_logs = value
+
+    @property
+    def max_logs(self):
+        return self.output.max_logs
+
+    @max_logs.setter
+    def max_logs(self, value):
+        self.output.max_logs = value
+
+    @property
+    def shake_team(self):
+        return self.output.shake_team
+
+    @shake_team.setter
+    def shake_team(self, value):
+        self.output.shake_team = value
+
+    @property
+    def shake_monster(self):
+        return self.output.shake_monster
+
+    @shake_monster.setter
+    def shake_monster(self, value):
+        self.output.shake_monster = value
 
     @property
     def monster(self):
@@ -187,13 +236,7 @@ class CombatManager:
 
     def add_log(self, text, color=COLOR_TEXT_MAIN):
         now_str = time.strftime("%H:%M:%S")
-        self.combat_logs.append({
-            "time": now_str,
-            "text": text,
-            "color": color
-        })
-        if len(self.combat_logs) > self.max_logs:
-            self.combat_logs.pop(0)
+        return self.output.add_log(now_str, text, color)
 
     def spawn_next_monster(self):
         if self.is_gold_dungeon:
@@ -285,17 +328,8 @@ class CombatManager:
 
     def add_popup(self, text, target="monster", color=(255, 255, 255), is_crit=False, is_skill=False):
         """在特定單位上方生成浮動文字"""
-        self.floating_popups.append({
-            "text": text,
-            "target": target,
-            "color": color,
-            "is_crit": is_crit,
-            "is_skill": is_skill,
-            "life": 40 if (is_crit or is_skill) else 28,
-            "max_life": 40 if (is_crit or is_skill) else 28,
-            "offset_y": -8,
-            "offset_x": self.rng.uniform(-10, 10)
-        })
+        offset_x = self.rng.uniform(-10, 10)
+        return self.output.add_popup(text, target, color, is_crit, is_skill, offset_x)
 
     def _get_slot_pos(self, slot_idx):
         # 席位 0 居中 (0.50 👑 主角)，夥伴對稱展開在兩側 (左 3 + 中 1 + 右 3)
@@ -332,22 +366,10 @@ class CombatManager:
     def update(self, dt, sound_mgr):
         """5 人遠征小隊與怪物即時戰鬥循環"""
         self.combat_stats.tick(dt)
-        # 0. 更新全隊 Buff 與特效
+        # 0. 更新全隊 Buff
         self.player.update_buffs(dt)
-        self.vfx_mgr.update(dt)
-
-        # 1. 震動衰減
-        for i in range(len(self.shake_team)):
-            if self.shake_team[i] > 0:
-                self.shake_team[i] = max(0.0, self.shake_team[i] - 30.0 * dt)
-        if self.shake_monster > 0:
-            self.shake_monster = max(0.0, self.shake_monster - 30.0 * dt)
-
-        # 2. 浮空文字更新
-        for p in self.floating_popups:
-            p["life"] -= 1
-            p["offset_y"] -= 1.3
-        self.floating_popups = [p for p in self.floating_popups if p["life"] > 0]
+        # 1-2. Presentation lifecycle: VFX -> shake decay -> popup update/filter
+        self.output.update(dt)
 
         # 3. 異常狀態與控制更新 (遍歷全體在場怪物)
         for m_i, m in enumerate(self.monsters):
@@ -415,7 +437,7 @@ class CombatManager:
                         bs.timer = min(bs.timer, bs.cooldown)
                     self.add_popup("【狂暴覺醒！】", f"monster_{m_i}", (255, 40, 40), is_skill=True)
                     self.add_log(f"💥 警報！首領 [{m.name}] 生命值低於 30%，進入【狂暴覺醒】！攻速大幅提升、技能冷卻縮短！", (255, 50, 50))
-                    self.vfx_mgr.add_vfx("distortion_bomb_singularity", 564, 103, color=(255, 30, 30))
+                    self.emit_vfx("distortion_bomb_singularity", 564, 103, color=(255, 30, 30))
 
         # 3.5 首領威脅領域：環境瘴氣 (Floor 10 首領戰場持續威脅)
         if self.is_boss_active and not self.is_gold_dungeon and not self.is_training_dummy and not self.is_resting:
