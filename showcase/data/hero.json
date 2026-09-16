@@ -10,8 +10,9 @@
       "accent": "#72baff",
       "preview": {
         "status": "ready",
-        "path": "assets/hero/stable.png",
-        "label": "Preview capture pending"
+        "video": "assets/hero/stable.webm",
+        "poster": "assets/hero/stable.png",
+        "label": "WebM preview"
       },
       "skills": [
         { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },
@@ -27,8 +28,9 @@
       "accent": "#ffad68",
       "preview": {
         "status": "ready",
-        "path": "assets/hero/sustain.png",
-        "label": "Preview capture pending"
+        "video": "assets/hero/sustain.webm",
+        "poster": "assets/hero/sustain.png",
+        "label": "WebM preview"
       },
       "skills": [
         { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },
@@ -44,8 +46,9 @@
       "accent": "#d99bff",
       "preview": {
         "status": "ready",
-        "path": "assets/hero/burst.png",
-        "label": "Preview capture pending"
+        "video": "assets/hero/burst.webm",
+        "poster": "assets/hero/burst.png",
+        "label": "WebM preview"
       },
       "skills": [
         { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },

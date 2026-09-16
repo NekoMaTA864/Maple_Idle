@@ -27,7 +27,7 @@
           <p class="section-kicker">COMBAT AVATAR / HERO</p>
           <h2 id="hero-heading">Three ways to shape the same sword.</h2>
         </div>
-        <p class="intro-copy">Presentation-only prototypes. The preview panels stay honest until real captures are available.</p>
+        <p class="intro-copy">Presentation-only prototypes captured from the real PySide6 sandbox.</p>
       </section>
 
       <p id="load-state" class="load-state" role="status">Loading build data…</p>
@@ -56,7 +56,8 @@
       function buildCard(build, index) {
         const titleId = `build-title-${index}`;
         const preview = build.preview || {};
-        const previewPath = preview.path || "";
+        const previewVideo = build.previewVideo || preview.video || "";
+        const previewPoster = build.previewPoster || preview.poster || preview.path || "";
         const previewLabel = preview.label || "Preview capture pending";
         const skills = build.skills.map((skill) => `
           <li class="skill-row">
@@ -79,27 +80,40 @@
           </div>
           <div class="preview-frame">
             <div class="preview-grid" aria-hidden="true"></div>
-            ${previewPath
-              ? `<img class="preview-image" src="${escapeHtml(previewPath)}" alt="${escapeHtml(build.name)} preview">
-                 <div class="preview-placeholder preview-fallback" hidden>
-                   <span class="preview-label">${escapeHtml(previewLabel)}</span>
-                   <span class="preview-note">STATIC PREVIEW AREA</span>
-                 </div>`
-              : `<div class="preview-placeholder preview-fallback">
-                   <span class="preview-label">${escapeHtml(previewLabel)}</span>
-                   <span class="preview-note">STATIC PREVIEW AREA</span>
-                 </div>`}
+            ${previewVideo
+              ? `<video class="preview-video" autoplay muted loop playsinline preload="metadata"${previewPoster ? ` poster="${escapeHtml(previewPoster)}"` : ""} aria-label="${escapeHtml(build.name)} animated preview">
+                   <source src="${escapeHtml(previewVideo)}" type="video/webm">
+                 </video>`
+              : ""}
+            ${previewPoster
+              ? `<img class="preview-image preview-poster"${previewVideo ? " hidden" : ""} src="${escapeHtml(previewPoster)}" alt="${escapeHtml(build.name)} preview">`
+              : ""}
+            <div class="preview-placeholder preview-fallback"${previewVideo || previewPoster ? " hidden" : ""}>
+              <span class="preview-label">${escapeHtml(previewLabel)}</span>
+              <span class="preview-note">STATIC PREVIEW AREA</span>
+            </div>
           </div>
           <div class="card-body">
             <p class="build-summary">${escapeHtml(build.summary)}</p>
             <ul class="skill-list" aria-label="${escapeHtml(build.name)} skills">${skills}</ul>
           </div>
         `;
-        const previewImage = card.querySelector(".preview-image");
+        const previewVideoElement = card.querySelector(".preview-video");
+        const previewPosterElement = card.querySelector(".preview-poster");
         const fallback = card.querySelector(".preview-fallback");
-        if (previewImage && fallback) {
-          previewImage.addEventListener("error", () => {
-            previewImage.hidden = true;
+        if (previewVideoElement) {
+          previewVideoElement.addEventListener("error", () => {
+            previewVideoElement.hidden = true;
+            if (previewPosterElement) {
+              previewPosterElement.hidden = false;
+            } else if (fallback) {
+              fallback.hidden = false;
+            }
+          });
+        }
+        if (previewPosterElement && fallback) {
+          previewPosterElement.addEventListener("error", () => {
+            previewPosterElement.hidden = true;
             fallback.hidden = false;
           });
         }
