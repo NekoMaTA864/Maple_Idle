@@ -19,6 +19,7 @@ MODE_LABELS = {
 
 try:
     from .avatars import AVATAR_NAMES, AvatarRenderer, draw_debug_anchors
+    from .auto_policy import select_auto_priority_skill
     from .combat_presentation import draw_runtime_presentation
     from .combat_rules import (
         BURNING_SOUL,
@@ -37,13 +38,13 @@ try:
         draw_skill_effect,
         loadout_presets,
         loadout_specs_for_avatar,
-        priority_skill_ids,
         prototype_id_for_avatar,
         skill_pool_for_avatar,
     )
     from .vfx import EffectState, cannon_recoil
 except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
     from avatars import AVATAR_NAMES, AvatarRenderer, draw_debug_anchors
+    from auto_policy import select_auto_priority_skill
     from combat_presentation import draw_runtime_presentation
     from combat_rules import (
         BURNING_SOUL,
@@ -62,7 +63,6 @@ except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
         draw_skill_effect,
         loadout_presets,
         loadout_specs_for_avatar,
-        priority_skill_ids,
         prototype_id_for_avatar,
         skill_pool_for_avatar,
     )
@@ -453,11 +453,20 @@ class CombatVisualSandbox(QWidget):
                 self.sequence_cursors[prototype_id] = (cursor + 1) % len(pool)
             return
 
+        equipped_skill_ids = tuple(spec.skill_id for spec in pool)
+        skill_id = select_auto_priority_skill(
+            prototype_id,
+            self.current_loadout_name,
+            equipped_skill_ids,
+            self.runtime_state,
+            self.cooldowns_remaining,
+        )
+        if skill_id is None:
+            return
         slot_by_id = {spec.skill_id: index for index, spec in enumerate(pool)}
-        for skill_id in priority_skill_ids[prototype_id]:
-            if skill_id in slot_by_id and self.cooldowns_remaining.get(skill_id, 0.0) <= 0.0:
-                self._trigger_skill(slot_by_id[skill_id])
-                return
+        slot_index = slot_by_id.get(skill_id)
+        if slot_index is not None:
+            self._trigger_skill(slot_index)
 
     def _draw_active_effects(self, painter: QPainter, area: QRectF) -> None:
         for effect in self.active_effects:
