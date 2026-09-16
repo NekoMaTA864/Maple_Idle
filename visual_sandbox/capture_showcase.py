@@ -5,7 +5,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if os.name == "nt":
+    # The Windows Qt platform loads the installed CJK font database.  The
+    # offscreen plugin on this host reports zero families and renders boxes.
+    os.environ["QT_QPA_PLATFORM"] = "windows"
+else:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QImage, QPainter
@@ -13,10 +18,14 @@ from PySide6.QtWidgets import QApplication
 
 try:
     from .combat_rules import BURNING_SOUL, FIGHTING_INSTINCT, RAGE_ORBS
+    from .fonts import resolved_ui_family
     from .sandbox import CombatVisualSandbox, MODE_MANUAL
+    from .skills import HERO_PHANTOM_SLASH, HERO_SPATIAL_SLASH, HERO_SWORD_DESCENT
 except ImportError:  # Direct ``py -3 visual_sandbox/capture_showcase.py`` execution.
     from combat_rules import BURNING_SOUL, FIGHTING_INSTINCT, RAGE_ORBS
+    from fonts import resolved_ui_family
     from sandbox import CombatVisualSandbox, MODE_MANUAL
+    from skills import HERO_PHANTOM_SLASH, HERO_SPATIAL_SLASH, HERO_SWORD_DESCENT
 
 
 CAPTURE_WIDTH = 540
@@ -51,7 +60,7 @@ def _capture_stable(window: CombatVisualSandbox) -> QImage:
     runtime.set(RAGE_ORBS, 5)
     runtime.activate(BURNING_SOUL, 8.0)
     assert window._trigger_skill(2), "stable showcase spatial slash did not cast"
-    effect = window.active_effects[-1]
+    effect = next(effect for effect in window.active_effects if effect.effect_id == HERO_SPATIAL_SLASH)
     assert effect.variant == "maximum"
     effect.age = 0.32
     return _render(window)
@@ -64,7 +73,7 @@ def _capture_sustain(window: CombatVisualSandbox) -> QImage:
     runtime.activate(BURNING_SOUL, 8.0)
     runtime.activate(FIGHTING_INSTINCT, 8.0)
     assert window._trigger_skill(1), "sustain showcase phantom slash did not cast"
-    effect = window.active_effects[-1]
+    effect = next(effect for effect in window.active_effects if effect.effect_id == HERO_PHANTOM_SLASH)
     assert effect.variant == "enhanced"
     effect.age = 0.30
     return _render(window)
@@ -76,7 +85,7 @@ def _capture_burst(window: CombatVisualSandbox) -> QImage:
     runtime.set(RAGE_ORBS, 5)
     runtime.activate(FIGHTING_INSTINCT, 8.0)
     assert window._trigger_skill(3), "burst showcase sword descent did not cast"
-    effect = window.active_effects[-1]
+    effect = next(effect for effect in window.active_effects if effect.effect_id == HERO_SWORD_DESCENT)
     assert effect.variant == "instinct"
     effect.age = 0.37
     return _render(window)
@@ -85,6 +94,7 @@ def _capture_burst(window: CombatVisualSandbox) -> QImage:
 def capture_showcase() -> tuple[Path, ...]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
+    print(f"Qt UI font: {resolved_ui_family()}")
     window = CombatVisualSandbox()
     window.idle_timer.stop()
     window.show()

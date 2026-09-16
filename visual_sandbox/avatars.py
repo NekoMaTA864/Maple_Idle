@@ -3,7 +3,12 @@
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+
+try:
+    from .fonts import ui_font
+except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
+    from fonts import ui_font
 
 
 AVATAR_NAMES = ("Hero", "Night Lord", "Cannon", "Bishop")
@@ -312,7 +317,7 @@ class AvatarRenderer:
 
 def draw_debug_anchors(painter: QPainter, anchors: dict[str, QPointF]) -> None:
     colors = {"center": "#ffffff", "attack_origin": "#ffdc70", "tip": "#ff8c8c", "ground": "#77efb1", "muzzle": "#ffad63"}
-    painter.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+    painter.setFont(ui_font(8, bold=True))
     for name, point in anchors.items():
         painter.setPen(QPen(QColor(colors.get(name, "#ffffff")), 1.5))
         painter.setBrush(QColor(colors.get(name, "#ffffff")))

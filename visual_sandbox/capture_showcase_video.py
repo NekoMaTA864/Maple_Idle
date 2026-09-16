@@ -7,7 +7,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if os.name == "nt":
+    # The Windows Qt platform loads the installed CJK font database.  The
+    # offscreen plugin on this host reports zero families and renders boxes.
+    os.environ["QT_QPA_PLATFORM"] = "windows"
+else:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
     import cv2
@@ -24,10 +29,12 @@ from PySide6.QtWidgets import QApplication
 
 try:
     from .combat_rules import BURNING_SOUL, FIGHTING_INSTINCT, RAGE_ORBS
+    from .fonts import resolved_ui_family
     from .sandbox import CombatVisualSandbox, MODE_MANUAL
     from .skills import loadout_presets
 except ImportError:  # Direct ``py -3 visual_sandbox/capture_showcase_video.py`` execution.
     from combat_rules import BURNING_SOUL, FIGHTING_INSTINCT, RAGE_ORBS
+    from fonts import resolved_ui_family
     from sandbox import CombatVisualSandbox, MODE_MANUAL
     from skills import loadout_presets
 
@@ -219,6 +226,7 @@ def capture_showcase_videos() -> tuple[Path, ...]:
     """Generate stable, sustain, and burst WebM previews in a fixed order."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
+    print(f"Qt UI font: {resolved_ui_family()}")
     window = CombatVisualSandbox()
     window.idle_timer.stop()
     window.show()

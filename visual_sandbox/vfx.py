@@ -117,6 +117,65 @@ def draw_burning_soul_cast(painter: QPainter, effect: EffectState, area: QRectF)
     painter.restore()
 
 
+def draw_burning_soul_followup(painter: QPainter, effect: EffectState, area: QRectF) -> None:
+    """Draw the short, independent soul-sword follow-up presentation."""
+    delay = 0.10
+    local_age = effect.age - delay
+    flight_duration = 0.27
+    if local_age < 0.0:
+        return
+
+    travel_x = effect.target.x() - effect.origin.x()
+    travel_y = effect.target.y() - effect.origin.y()
+    travel_length = max(1.0, math.hypot(travel_x, travel_y))
+    direction = QPointF(travel_x / travel_length, travel_y / travel_length)
+
+    painter.save()
+    if 0.0 <= local_age <= flight_duration:
+        progress = clamp01(local_age / flight_duration)
+        eased = 1.0 - (1.0 - progress) ** 2
+        position = lerp_point(effect.origin, effect.target, eased)
+        fade = min(1.0, (1.0 - progress) * 1.25)
+        trail_start = QPointF(
+            position.x() - direction.x() * area.width() * 0.075,
+            position.y() - direction.y() * area.width() * 0.075,
+        )
+        painter.setPen(
+            QPen(
+                QColor(255, 112, 47, int(135 * fade)),
+                max(2.0, area.width() * 0.009),
+                Qt.PenStyle.SolidLine,
+                Qt.PenCapStyle.RoundCap,
+            )
+        )
+        painter.drawLine(trail_start, position)
+
+        blade_length = area.width() * 0.038
+        blade_width = area.width() * 0.010
+        normal = QPointF(-direction.y(), direction.x())
+        base = QPointF(
+            position.x() - direction.x() * blade_length * 0.55,
+            position.y() - direction.y() * blade_length * 0.55,
+        )
+        tip = QPointF(
+            position.x() + direction.x() * blade_length * 0.70,
+            position.y() + direction.y() * blade_length * 0.70,
+        )
+        blade = QPainterPath()
+        blade.moveTo(QPointF(base.x() + normal.x() * blade_width, base.y() + normal.y() * blade_width))
+        blade.lineTo(QPointF(base.x() - normal.x() * blade_width, base.y() - normal.y() * blade_width))
+        blade.lineTo(tip)
+        blade.closeSubpath()
+        painter.setBrush(QColor(255, 159, 64, int(220 * fade)))
+        painter.setPen(QPen(QColor(255, 237, 164, int(235 * fade)), 1.2))
+        painter.drawPath(blade)
+
+    impact_progress = (local_age - 0.23) / 0.16
+    if 0.0 <= impact_progress <= 1.0:
+        draw_impact(painter, effect.target, impact_progress, "small", (255, 145, 64))
+    painter.restore()
+
+
 def draw_burning_soul_sword(painter: QPainter, center: QPointF, area: QRectF, phase: float, remaining: float) -> None:
     """Draw the small non-blocking sword-soul visual while Burning Soul is active."""
     pulse = 0.72 + 0.28 * math.sin(phase * 2.2)

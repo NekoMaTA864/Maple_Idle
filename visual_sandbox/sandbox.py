@@ -3,7 +3,7 @@
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QWidget
 
 
@@ -26,11 +26,14 @@ try:
         RAGE_ORBS,
         apply_skill_runtime_effects,
         create_runtime_state,
+        resolve_post_cast_events,
         resolve_skill_variant,
     )
     from .combat_runtime import CombatRuntimeState
+    from .fonts import ui_font
     from .skills import (
         create_effect,
+        create_presentation_effect,
         draw_skill_effect,
         loadout_presets,
         loadout_specs_for_avatar,
@@ -48,11 +51,14 @@ except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
         RAGE_ORBS,
         apply_skill_runtime_effects,
         create_runtime_state,
+        resolve_post_cast_events,
         resolve_skill_variant,
     )
     from combat_runtime import CombatRuntimeState
+    from fonts import ui_font
     from skills import (
         create_effect,
+        create_presentation_effect,
         draw_skill_effect,
         loadout_presets,
         loadout_specs_for_avatar,
@@ -272,7 +278,7 @@ class CombatVisualSandbox(QWidget):
         center_zone = QRectF(content.left() + zone_width, content.top(), zone_width, content.height())
         right_zone = QRectF(content.left() + zone_width * 2, content.top(), zone_width, content.height())
         painter.setPen(QColor("#d9ebff"))
-        painter.setFont(QFont("Arial", max(9, int(area.width() * 0.023)), QFont.Weight.Bold))
+        painter.setFont(ui_font(max(9, int(area.width() * 0.023)), bold=True))
         painter.drawText(left_zone, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "MISTY CANYON")
         painter.drawText(center_zone, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter, self.avatar_name.upper())
         painter.setPen(QColor("#9dc1ee"))
@@ -316,7 +322,7 @@ class CombatVisualSandbox(QWidget):
         painter.setBrush(QColor("#eb6370"))
         painter.drawRoundedRect(QRectF(bar.left(), bar.top(), bar.width() * (0.72 if boss else 0.56), bar.height()), 3, 3)
         painter.setPen(QColor("#f5dcea"))
-        painter.setFont(QFont("Arial", max(8, int(self.width() * 0.018)), QFont.Weight.Bold))
+        painter.setFont(ui_font(max(8, int(self.width() * 0.018)), bold=True))
         painter.drawText(QRectF(bar.left() - 25, bar.bottom() + 2, bar.width() + 50, 18), Qt.AlignmentFlag.AlignHCenter, name)
 
     def _draw_combat_space(self, painter: QPainter, area: QRectF) -> None:
@@ -325,7 +331,7 @@ class CombatVisualSandbox(QWidget):
         painter.setBrush(QColor(43, 77, 126, 24))
         painter.drawRoundedRect(space, 22, 22)
         painter.setPen(QColor(167, 204, 255, 130))
-        painter.setFont(QFont("Arial", max(9, int(area.width() * 0.022))))
+        painter.setFont(ui_font(max(9, int(area.width() * 0.022))))
         painter.drawText(space, Qt.AlignmentFlag.AlignCenter, "COMBAT  /  VFX  SPACE")
 
     def _draw_player(self, painter: QPainter, area: QRectF) -> None:
@@ -365,7 +371,7 @@ class CombatVisualSandbox(QWidget):
         painter.setBrush(QColor("#55d894"))
         painter.drawRoundedRect(QRectF(hp.left(), hp.top(), hp.width() * 0.82, hp.height()), 5, 5)
         painter.setPen(QColor("#d8f7e7"))
-        painter.setFont(QFont("Arial", max(9, int(area.width() * 0.021)), QFont.Weight.Bold))
+        painter.setFont(ui_font(max(9, int(area.width() * 0.021)), bold=True))
         player_label = f"{self.avatar_name.upper()}  ·  {self.current_loadout_name}"
         painter.drawText(QRectF(hp.left(), hp.bottom() + 4, hp.width(), 18), Qt.AlignmentFlag.AlignHCenter, player_label)
 
@@ -373,7 +379,7 @@ class CombatVisualSandbox(QWidget):
             resource_y = hp.bottom() + 22
             rage_orbs = max(0, min(5, int(self.runtime_state.get(RAGE_ORBS, 0))))
             painter.setPen(QColor("#ffd98a"))
-            painter.setFont(QFont("Microsoft JhengHei", max(8, int(area.width() * 0.019)), QFont.Weight.Bold))
+            painter.setFont(ui_font(max(8, int(area.width() * 0.019)), bold=True))
             painter.drawText(
                 QRectF(hp.left(), resource_y, hp.width(), 16),
                 Qt.AlignmentFlag.AlignHCenter,
@@ -415,6 +421,16 @@ class CombatVisualSandbox(QWidget):
         self.cooldowns_remaining[skill_id] = skill_spec.cooldown
         self.auto_action_remaining = self.auto_action_interval
         apply_skill_runtime_effects(prototype_id, skill_id, self.runtime_state)
+        for event_id in resolve_post_cast_events(prototype_id, skill_id, self.runtime_state):
+            self.active_effects.append(
+                create_presentation_effect(
+                    event_id,
+                    player_center,
+                    target,
+                    target_ground,
+                    area,
+                )
+            )
         self.active_skill_slot = slot_index
         self.active_skill_name = skill_spec.display_name
         self.active_skill_variant = variant
@@ -474,7 +490,7 @@ class CombatVisualSandbox(QWidget):
             painter.setPen(QPen(QColor("#85b8e8"), 1))
             painter.drawRoundedRect(name_rect, 7, 7)
             painter.setPen(QColor("#f0f6ff"))
-            painter.setFont(QFont("Microsoft JhengHei", max(8, int(area.width() * 0.020)), QFont.Weight.Bold))
+            painter.setFont(ui_font(max(8, int(area.width() * 0.020)), bold=True))
             status_text = MODE_LABELS[self.control_mode]
             if self.skill_flash > 0.0 and self.active_skill_name:
                 skill_display = self.active_skill_name
@@ -494,7 +510,7 @@ class CombatVisualSandbox(QWidget):
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(slot.adjusted(3, 3, -3, -3), 9, 9)
             painter.setPen(QColor("#dbeaff"))
-            painter.setFont(QFont("Arial", max(8, int(slot_width * 0.15)), QFont.Weight.Bold))
+            painter.setFont(ui_font(max(8, int(slot_width * 0.15)), bold=True))
             painter.drawText(slot.adjusted(6, 4, -6, -slot_width * 0.72), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, key_label)
             self._draw_skill_icon(painter, slot, index, color)
 
@@ -504,7 +520,7 @@ class CombatVisualSandbox(QWidget):
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRoundedRect(slot.adjusted(3, 3, -3, -3), 9, 9)
                 painter.setPen(QColor("#f1f5ff"))
-                painter.setFont(QFont("Arial", max(9, int(slot_width * 0.22)), QFont.Weight.Bold))
+                painter.setFont(ui_font(max(9, int(slot_width * 0.22)), bold=True))
                 painter.drawText(
                     slot.adjusted(2, slot_width * 0.30, -2, -slot_width * 0.27),
                     Qt.AlignmentFlag.AlignCenter,

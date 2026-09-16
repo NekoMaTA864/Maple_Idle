@@ -7,6 +7,11 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QPainter
 
 try:
+    from .combat_rules import HERO_BURNING_SOUL_FOLLOWUP
+except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
+    from combat_rules import HERO_BURNING_SOUL_FOLLOWUP
+
+try:
     from .vfx import (
         EffectState,
         clamp01,
@@ -14,6 +19,7 @@ try:
         draw_cannonball,
         draw_flying_shuriken,
         draw_burning_soul_cast,
+        draw_burning_soul_followup,
         draw_fighting_instinct_burst,
         draw_hero_slash,
         draw_hero_phantom_slash,
@@ -33,6 +39,7 @@ except ImportError:  # Direct ``py visual_sandbox/main.py`` execution.
         draw_cannonball,
         draw_flying_shuriken,
         draw_burning_soul_cast,
+        draw_burning_soul_followup,
         draw_fighting_instinct_burst,
         draw_hero_slash,
         draw_hero_phantom_slash,
@@ -200,11 +207,29 @@ def create_effect(
     return EffectState(spec.effect_id, 0.0, spec.duration, QPointF(origin), QPointF(target), QPointF(target_ground), variant)
 
 
+def create_presentation_effect(
+    effect_id: str,
+    player_center: QPointF,
+    target: QPointF,
+    target_ground: QPointF,
+    area: QRectF,
+) -> EffectState:
+    """Create a stateless follow-up effect without skill/cooldown semantics."""
+    if effect_id != HERO_BURNING_SOUL_FOLLOWUP:
+        raise ValueError(f"Unknown presentation event: {effect_id}")
+    origin = QPointF(
+        player_center.x() + area.width() * 0.15,
+        player_center.y() - area.height() * 0.018,
+    )
+    return EffectState(effect_id, 0.0, 0.50, origin, QPointF(target), QPointF(target_ground))
+
+
 def draw_skill_effect(painter: QPainter, effect: EffectState, area: QRectF) -> None:
     renderers = {
         HERO_SLASH: _draw_hero_skill,
         HERO_PHANTOM_SLASH: _draw_hero_phantom_skill,
         HERO_BURNING_SOUL: _draw_hero_burning_soul_skill,
+        HERO_BURNING_SOUL_FOLLOWUP: _draw_hero_burning_soul_followup_skill,
         HERO_SPATIAL_SLASH: _draw_hero_spatial_slash_skill,
         HERO_FIGHTING_INSTINCT: _draw_hero_fighting_instinct_skill,
         HERO_SWORD_DESCENT: _draw_hero_sword_descent_skill,
@@ -233,6 +258,10 @@ def _draw_hero_phantom_skill(painter: QPainter, effect: EffectState, area: QRect
 
 def _draw_hero_burning_soul_skill(painter: QPainter, effect: EffectState, area: QRectF) -> None:
     draw_burning_soul_cast(painter, effect, area)
+
+
+def _draw_hero_burning_soul_followup_skill(painter: QPainter, effect: EffectState, area: QRectF) -> None:
+    draw_burning_soul_followup(painter, effect, area)
 
 
 def _draw_hero_spatial_slash_skill(painter: QPainter, effect: EffectState, area: QRectF) -> None:

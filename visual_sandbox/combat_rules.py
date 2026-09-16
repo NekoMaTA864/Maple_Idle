@@ -17,6 +17,7 @@ HERO_ID = "hero"
 RAGE_ORBS = "rage_orbs"
 BURNING_SOUL = "burning_soul"
 FIGHTING_INSTINCT = "fighting_instinct"
+HERO_BURNING_SOUL_FOLLOWUP = "hero_burning_soul_followup"
 
 RAGE_GENERATORS = {
     "hero_rage_attack": 1,
@@ -58,6 +59,26 @@ def apply_skill_runtime_effects(
     if timed_activation is not None:
         state_key, duration = timed_activation
         runtime.activate(state_key, duration)
+
+
+def resolve_post_cast_events(
+    prototype_id: str,
+    skill_id: str,
+    runtime: CombatRuntimeState,
+) -> tuple[str, ...]:
+    """Return presentation-only events caused by a successful post-cast state.
+
+    This deliberately stays a small rule lookup.  The caller creates the
+    returned presentation effect; no runtime state is mutated here, and the
+    Burning Soul skill is excluded so it cannot recursively trigger itself.
+    """
+    if prototype_id != HERO_ID:
+        return ()
+    if skill_id == "hero_burning_soul_sword":
+        return ()
+    if runtime.is_active(BURNING_SOUL):
+        return (HERO_BURNING_SOUL_FOLLOWUP,)
+    return ()
 
 
 def effective_rage(runtime: CombatRuntimeState) -> int | float:
