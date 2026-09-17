@@ -15,10 +15,13 @@ from settings import (
 )
 from classes import ALL_CLASSES
 from vfx_renderer import render_maple_vfx, render_aura_halo
+from arena_layout import ArenaLayout
+from combat_avatar import CombatAvatar, draw_enemy_emblem
+from vfx_prototype import AreaEffect, ImpactEffect, PrototypeEffect
 
 class CombatArenaWidget(QWidget):
     """即時動態繪製特效、螢幕震動、受擊白閃與楓之谷風格跳字 (硬體抗鋸齒)"""
-    def __init__(self, combat_mgr, parent=None):
+    def __init__(self, combat_mgr, parent=None, show_debug_anchors=False):
         super().__init__(parent)
         self.combat_mgr = combat_mgr
         self.setMinimumHeight(440)
@@ -32,6 +35,13 @@ class CombatArenaWidget(QWidget):
         self.flash_timer = 0.0
         self.global_rot_angle = 0.0
         self.game_time = 0.0
+        self.combat_avatar = CombatAvatar("hero")
+        self.show_debug_anchors = bool(show_debug_anchors)
+        self.skill_slots = [
+            {"label": f"S{index + 1}", "cooldown": 0.0, "max_cooldown": 0.0,
+             "color": color}
+            for index, color in enumerate(((255, 215, 90), (176, 132, 255), (255, 145, 70), (130, 236, 210)))
+        ]
 
     def trigger_shake(self, power=3.5, duration=0.22):
         self.shake_power = power
@@ -40,8 +50,41 @@ class CombatArenaWidget(QWidget):
     def trigger_flash(self, duration=0.08):
         self.flash_timer = duration
 
+    def set_skill_cooldown(self, slot_idx, remaining, total=None):
+        """Set presentation-only cooldown data for one of the four prototype slots."""
+        if not 0 <= int(slot_idx) < len(self.skill_slots):
+            return
+        slot = self.skill_slots[int(slot_idx)]
+        slot["cooldown"] = max(0.0, float(remaining))
+        if total is not None:
+            slot["max_cooldown"] = max(0.0, float(total))
+
+    def set_skill_label(self, slot_idx, label):
+        if 0 <= int(slot_idx) < len(self.skill_slots):
+            self.skill_slots[int(slot_idx)]["label"] = str(label)
+
+    def set_combat_avatar(self, avatar_id):
+        """Select a weapon-symbol avatar without touching gameplay state."""
+        self.combat_avatar.set_avatar(avatar_id)
+
+    def trigger_avatar_attack(self):
+        self.combat_avatar.trigger_attack()
+
+    def avatar_anchor(self, name="center"):
+        layout = ArenaLayout(self.width(), self.height())
+        return self.combat_avatar.anchor(name, layout.player_position())
+
+    def enemy_anchor(self, name="center", index=0, total=None):
+        layout = ArenaLayout(self.width(), self.height())
+        monster_total = total if total is not None else max(1, len(getattr(self.combat_mgr, "monsters", [])))
+        return layout.enemy_anchor(name, index=index, total=monster_total)
+
+    def set_debug_anchors(self, visible):
+        self.show_debug_anchors = bool(visible)
+
     def update_vfx_timer(self, dt):
         self.game_time += dt
+        self.combat_avatar.update(dt)
         self.global_rot_angle += 720.0 * dt
         if self.shake_timer > 0:
             self.shake_timer = max(0.0, self.shake_timer - dt)
@@ -55,19 +98,80 @@ class CombatArenaWidget(QWidget):
         if self.flash_timer > 0:
             self.flash_timer = max(0.0, self.flash_timer - dt)
 
+        for slot in self.skill_slots:
+            if slot["cooldown"] > 0.0:
+                slot["cooldown"] = max(0.0, slot["cooldown"] - dt)
+
     def _get_canvas_monster_pos(self, idx, total, w, y=75):
-        if total <= 1:
-            ratios = [0.50]
-        elif total == 2:
-            ratios = [0.38, 0.62]
-        elif total == 3:
-            ratios = [0.26, 0.50, 0.74]
-        elif total == 4:
-            ratios = [0.18, 0.39, 0.61, 0.82]
-        else:
-            ratios = [0.14, 0.32, 0.50, 0.68, 0.86]
-        r = ratios[idx] if idx < len(ratios) else 0.5
-        return QPoint(int(w * r), y)
+        layout = ArenaLayout(w, self.height())
+        x_pos, y_pos = layout.enemy_position(idx, total)
+        return QPoint(int(x_pos), int(y_pos))
+
+    def _draw_skill_bar(self, painter, layout):
+        """Draw four presentation-only skill slots below the primary player."""
+        positions = layout.skill_positions(len(self.skill_slots))
+        painter.save()
+        for index, (x_pos, y_pos) in enumerate(positions):
+            slot = self.skill_slots[index]
+            color = QColor(*slot["color"])
+            cooldown = max(0.0, float(slot["cooldown"]))
+            max_cooldown = max(0.0, float(slot["max_cooldown"]))
+            ready = cooldown <= 0.0
+            box = QRectF(x_pos - 29, y_pos - 25, 58, 50)
+
+            painter.setBrush(QBrush(QColor(18, 25, 39, 220)))
+            painter.setPen(QPen(QColor(104, 220, 170, 210) if ready else QColor(71, 85, 105, 190), 1.2))
+            painter.drawRoundedRect(box, 8, 8)
+
+            painter.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), 210)))
+            painter.setPen(QPen(QColor(255, 255, 255, 210), 1.0))
+            painter.drawEllipse(QPointF(x_pos, y_pos - 5), 13, 13)
+            painter.setFont(QFont("Microsoft YaHei UI", 8, QFont.Bold))
+            painter.setPen(QColor(20, 25, 35))
+            painter.drawText(QRectF(x_pos - 18, y_pos - 17, 36, 24), Qt.AlignCenter, slot["label"])
+
+            if not ready:
+                overlay_ratio = min(1.0, cooldown / max_cooldown) if max_cooldown else 1.0
+                overlay_height = 42.0 * overlay_ratio
+                painter.setBrush(QBrush(QColor(5, 8, 15, 155)))
+                painter.setPen(Qt.NoPen)
+                painter.drawRoundedRect(QRectF(x_pos - 27, y_pos + 23 - overlay_height, 54, overlay_height), 6, 6)
+                painter.setFont(QFont("Microsoft YaHei UI", 8, QFont.Bold))
+                painter.setPen(QColor(255, 245, 210))
+                painter.drawText(QRectF(x_pos - 27, y_pos + 4, 54, 18), Qt.AlignCenter, f"{cooldown:.1f}s")
+            else:
+                painter.setFont(QFont("Microsoft YaHei UI", 6, QFont.Bold))
+                painter.setPen(QColor(104, 220, 170, 180))
+                painter.drawText(QRectF(x_pos - 27, y_pos + 9, 54, 14), Qt.AlignCenter, "READY")
+        painter.restore()
+
+    def _draw_debug_anchors(self, painter, layout, total_m):
+        """Optional anchor overlay; hidden in normal Arena and Gallery mode."""
+        avatar_center = layout.player_position()
+        points = [
+            ("avatar.center", self.combat_avatar.anchor("center", avatar_center), (120, 220, 255)),
+            ("avatar.attack_origin", self.combat_avatar.anchor("attack_origin", avatar_center), (255, 190, 90)),
+            ("avatar.tip", self.combat_avatar.anchor("tip", avatar_center), (255, 240, 150)),
+            ("avatar.ground", self.combat_avatar.anchor("ground", avatar_center), (120, 255, 180)),
+        ]
+        for enemy_idx in range(min(3, total_m)):
+            enemy = layout.enemy_anchors(enemy_idx, total_m)
+            points.extend([
+                (f"enemy{enemy_idx}.hit", enemy["hit"], (255, 120, 150)),
+                (f"enemy{enemy_idx}.ground", enemy["ground"], (180, 140, 255)),
+            ])
+        points.append(("companion.staging", layout.companion_position(), (130, 170, 205)))
+
+        painter.save()
+        painter.setFont(QFont("Microsoft YaHei UI", 6, QFont.Normal))
+        for label, (x_pos, y_pos), rgb in points:
+            painter.setPen(QPen(QColor(*rgb, 220), 1.0))
+            painter.setBrush(QBrush(QColor(*rgb, 125)))
+            painter.drawEllipse(QPointF(x_pos, y_pos), 3.0, 3.0)
+            painter.drawLine(QPointF(x_pos - 6, y_pos), QPointF(x_pos + 6, y_pos))
+            painter.drawLine(QPointF(x_pos, y_pos - 6), QPointF(x_pos, y_pos + 6))
+            painter.drawText(QRectF(x_pos + 7, y_pos - 8, 118, 14), Qt.AlignLeft, label)
+        painter.restore()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -82,6 +186,7 @@ class CombatArenaWidget(QWidget):
         painter.setRenderHint(QPainter.TextAntialiasing)
         w = self.width()
         h = self.height()
+        layout = ArenaLayout(w, h)
 
         # 應用螢幕震動位移
         if self.shake_timer > 0:
@@ -136,22 +241,20 @@ class CombatArenaWidget(QWidget):
             painter.drawText(QRect(w - 380, 8, 368, 20), Qt.AlignRight, status_txt)
 
         # 戰場地面基準線 (動態根據畫布高度拉開 Y 軸)
-        ground_y = int(h * 0.82)
+        ground_y = int(layout.player_y + 30)
         painter.setPen(QPen(QColor(52, 70, 102, 160), 1.5))
         painter.drawLine(10, ground_y, w - 10, ground_y)
 
-        # 隊伍席位中心 (7 人陣型：左翼 3 夥伴 + 中央 👑 核心主角 + 右翼 3 夥伴)
-        slot_ratio_map = {
-            0: 0.50,  # 👑 核心主角 (居中王者站位)
-            1: 0.36,  # ⚔️ 夥伴 1
-            2: 0.23,  # 🛡️ 夥伴 2
-            3: 0.10,  # 🏹 夥伴 3
-            4: 0.64,  # 🔮 夥伴 4
-            5: 0.77,  # 🗡️ 夥伴 5
-            6: 0.90,  # 💣 夥伴 6
-        }
-        team_len = len(self.combat_mgr.player.team)
-        slot_positions = [QPoint(int(w * slot_ratio_map.get(idx, 0.5)), int(h * 0.78)) for idx in range(team_len)]
+        # Render localized ground effects before actor bodies.
+        vfx_list = self.combat_mgr.vfx_mgr.effects
+        for eff in vfx_list:
+            if isinstance(eff, AreaEffect):
+                eff.draw(painter)
+
+        # Render one primary player body in the prototype shell; the full
+        # expedition team remains in gameplay state and information panels.
+        player_x, player_y = layout.player_position()
+        slot_positions = [QPoint(int(player_x), int(player_y))]
 
         slot_colors = [
             QColor(255, 215, 0),    # 👑 席位0 主角 (耀眼純金)
@@ -174,32 +277,37 @@ class CombatArenaWidget(QWidget):
             painter.setPen(Qt.NoPen)
             painter.drawEllipse(QPointF(sp.x(), sp.y() + 18), radius, 14 if idx == 0 else 11)
 
-        # 繪製隊員標識 (主角冠冕與標籤)
-        for idx, sp in enumerate(slot_positions):
-            if idx < len(self.combat_mgr.player.team):
-                m_member = self.combat_mgr.player.team[idx]
-                if idx == 0:
-                    f_lbl = f"👑 {m_member.name}"
-                    b_w, b_h = 76, 22
-                else:
-                    f_lbl = f"[{idx}] {m_member.name[:3]}"
-                    b_w, b_h = 58, 20
-            else:
-                f_lbl = f"[{idx}]"
-                b_w, b_h = 50, 20
+        # The primary combat representation is a weapon/class symbol, not a
+        # full character sprite or a large nameplate.
+        self.combat_avatar.draw(painter, (player_x, player_y))
+        if self.combat_mgr.player.team:
+            avatar_label = self.combat_avatar.definition.label
+            painter.setFont(QFont("Microsoft YaHei UI", 7, QFont.Bold))
+            painter.setPen(QColor(228, 235, 248, 190))
+            painter.drawText(QRectF(player_x - 80, player_y - 70, 160, 16), Qt.AlignCenter, avatar_label)
 
-            f_col = slot_colors[idx % len(slot_colors)]
-            painter.setBrush(QBrush(f_col))
-            painter.setPen(QPen(QColor(255, 255, 255, 220 if idx == 0 else 180), 1.5 if idx == 0 else 1))
-            painter.drawRoundedRect(QRectF(sp.x() - b_w // 2, sp.y() - b_h // 2, b_w, b_h), 5 if idx == 0 else 4, 5 if idx == 0 else 4)
-            painter.setFont(QFont("Microsoft YaHei UI", 8 if idx == 0 else 7, QFont.Bold))
-            painter.setPen(QColor(20, 20, 30) if idx == 0 else QColor(255, 255, 255))
-            painter.drawText(QRectF(sp.x() - b_w // 2, sp.y() - b_h // 2, b_w, b_h), Qt.AlignCenter, f_lbl)
+        if self.combat_mgr.player.team:
+            primary = self.combat_mgr.player.team[0]
+            max_hp = max(1, int(primary.get_max_hp(self.combat_mgr.player)))
+            hp_ratio = max(0.0, min(1.0, float(primary.current_hp) / max_hp))
+            hp_x = int(player_x - 58)
+            hp_y = int(player_y + 15)
+            painter.setBrush(QBrush(QColor(18, 24, 34, 230)))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(QRectF(hp_x, hp_y, 116, 7), 3, 3)
+            painter.setBrush(QBrush(QColor(80, 205, 140)))
+            painter.drawRoundedRect(QRectF(hp_x, hp_y, 116 * hp_ratio, 7), 3, 3)
+            painter.setFont(QFont("Microsoft YaHei UI", 7, QFont.Bold))
+            painter.setPen(QColor(190, 240, 215))
+            painter.drawText(QRectF(hp_x - 8, hp_y + 8, 132, 14), Qt.AlignCenter,
+                             f"PLAYER HP {int(primary.current_hp)}/{max_hp}")
+
+        # Companion staging remains an invisible layout anchor in normal play.
 
         # 繪製怪物群體 (支援 1~5 隻多怪物波次、菁英怪光芒與專屬即時血條，位置隨畫布動態自適應)
         monsters = self.combat_mgr.monsters if self.combat_mgr.monsters else ([self.combat_mgr.monster] if self.combat_mgr.monster else [])
         total_m = max(1, len(monsters))
-        monster_base_y = max(70, int(h * 0.25))
+        monster_base_y = int(layout.enemy_y)
 
         for idx, m in enumerate(monsters):
             m_pos = self._get_canvas_monster_pos(idx, total_m, w, y=monster_base_y)
@@ -222,31 +330,29 @@ class CombatArenaWidget(QWidget):
                 m_bob = math.sin(self.game_time * 3.5 + idx * 0.9) * 3.0
                 m_draw_y = m_pos.y() + m_bob
 
-                # 怪物徽記
+                # Enemy presentation is an abstract core/emblem; the name is
+                # secondary information rather than the enemy body.
+                draw_enemy_emblem(
+                    painter, (m_pos.x(), m_draw_y), m.is_boss, is_elite,
+                    self.game_time + idx * 0.17,
+                )
                 if m.is_boss:
-                    b_w, b_h = 86, 26
-                    b_col = QColor(*COLOR_BOSS_PURPLE)
-                    m_text = f"[BOSS] {m.name}"
+                    m_text = f"BOSS · {m.name}"
+                    label_color = QColor(222, 190, 255, 220)
                 elif is_elite:
-                    b_w, b_h = 84, 24
-                    b_col = QColor(214, 158, 46)
-                    m_text = f"[菁英] {m.name}"
+                    m_text = f"ELITE · {m.name}"
+                    label_color = QColor(255, 218, 125, 210)
                 else:
-                    b_w, b_h = 68, 20
-                    b_col = QColor(229, 62, 62)
-                    m_text = m.name[:4]
-
-                painter.setBrush(QBrush(b_col))
-                painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
-                painter.drawRoundedRect(QRectF(m_pos.x() - b_w // 2, m_draw_y - b_h // 2, b_w, b_h), 4, 4)
-                painter.setFont(QFont("Microsoft YaHei UI", 8 if not m.is_boss else 9, QFont.Bold))
-                painter.setPen(QColor(255, 255, 255))
-                painter.drawText(QRectF(m_pos.x() - b_w // 2, m_draw_y - b_h // 2, b_w, b_h), Qt.AlignCenter, m_text)
+                    m_text = m.name[:12]
+                    label_color = QColor(218, 185, 198, 190)
+                painter.setFont(QFont("Microsoft YaHei UI", 7 if not m.is_boss else 8, QFont.Bold))
+                painter.setPen(label_color)
+                painter.drawText(QRectF(m_pos.x() - 100, m_draw_y + (40 if m.is_boss else 31), 200, 16), Qt.AlignCenter, m_text)
 
                 # 頭頂血條 (即時微型血條)
                 bar_w = 64 if not m.is_boss else 86
                 bar_x = m_pos.x() - bar_w // 2
-                bar_y = m_draw_y - b_h // 2 - 8
+                bar_y = m_draw_y - (52 if m.is_boss else 41)
                 painter.setBrush(QBrush(QColor(20, 24, 33, 200)))
                 painter.setPen(Qt.NoPen)
                 painter.drawRect(bar_x, bar_y, bar_w, 4)
@@ -277,13 +383,14 @@ class CombatArenaWidget(QWidget):
                         )
 
         # 全螢幕大招暗角黑幕 (Vignette)
-        vfx_list = self.combat_mgr.vfx_mgr.effects
         has_screen_ultimate = any(eff.kind in ["holy", "aoe_beam", "dimension_rift", "dark_genesis_thunder"] and eff.progress < 0.7 for eff in vfx_list)
         if has_screen_ultimate:
             painter.fillRect(QRect(0, 0, w, h), QColor(0, 0, 0, 120))
 
         # 繪製高度差異化戰場視覺特效 (Visual Effects)
         for eff in vfx_list:
+            if isinstance(eff, (AreaEffect, ImpactEffect)):
+                continue
             p = eff.progress
             is_target_monster = (eff.target_y < 160 or getattr(eff, 'target_monster_idx', None) is not None)
             if is_target_monster:
@@ -329,6 +436,18 @@ class CombatArenaWidget(QWidget):
                 seed=eff.seed,
                 fracture_lines=getattr(eff, "fracture_lines", None)
             )
+
+        for eff in vfx_list:
+            if isinstance(eff, PrototypeEffect) and not isinstance(eff, (AreaEffect, ImpactEffect)):
+                eff.draw(painter)
+
+        # Impact/explosion is a distinct layer above the attack travel.
+        for eff in vfx_list:
+            if isinstance(eff, ImpactEffect):
+                eff.draw(painter)
+
+        if self.show_debug_anchors:
+            self._draw_debug_anchors(painter, layout, total_m)
 
         # 繪製受擊白閃 (Hit Flash)
         if self.flash_timer > 0:
@@ -395,5 +514,8 @@ class CombatArenaWidget(QWidget):
 
                 painter.setPen(QColor(cr, cg, cb, alpha))
                 painter.drawText(QRect(px - 90, py - 12, 180, 24), Qt.AlignCenter, pop_text)
+
+        # Final layer: the skill UI stays above all actor/VFX/popup pixels.
+        self._draw_skill_bar(painter, layout)
 
 

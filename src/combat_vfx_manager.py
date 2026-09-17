@@ -78,6 +78,24 @@ class VisualEffectManager:
         self.effects = []
         self.total_dropped_effects = 0
 
+    def add_effect(self, effect):
+        """Enqueue a presentation effect that follows the manager lifecycle contract.
+
+        Prototype effects use this path so the Debug Gallery and the formal
+        arena share this manager without changing the legacy ``add_vfx`` RNG
+        call order used by combat output.
+        """
+        if len(self.effects) >= self.MAX_CONCURRENT_EFFECTS:
+            lowest_eff = min(self.effects, key=_get_vfx_priority)
+            self.effects.remove(lowest_eff)
+            self.total_dropped_effects += 1
+        self.effects.append(effect)
+        return effect
+
+    def clear(self):
+        """Remove active presentation effects without touching gameplay state."""
+        self.effects.clear()
+
     def add_vfx(self, kind, x, y, target_x=None, target_y=None, color=(255, 255, 255), duration=0.45,
                 source_slot=None, target_monster_idx=None, target_slot=None):
         if len(self.effects) >= self.MAX_CONCURRENT_EFFECTS:
