@@ -251,6 +251,12 @@ class CombatArenaWidget(QWidget):
             if isinstance(eff, AreaEffect):
                 eff.draw(painter)
 
+        # Retained presentation visuals can explicitly sit behind the actor
+        # without making the arena aware of any class or skill state.
+        for eff in vfx_list:
+            if isinstance(eff, PrototypeEffect) and eff.layer == "before_avatar":
+                eff.draw(painter)
+
         # Render one primary player body in the prototype shell; the full
         # expedition team remains in gameplay state and information panels.
         player_x, player_y = layout.player_position()
@@ -301,6 +307,12 @@ class CombatArenaWidget(QWidget):
             painter.setPen(QColor(190, 240, 215))
             painter.drawText(QRectF(hp_x - 8, hp_y + 8, 132, 14), Qt.AlignCenter,
                              f"PLAYER HP {int(primary.current_hp)}/{max_hp}")
+
+        # A retained weapon/aura can be layered above the actor body through
+        # the same generic presentation lifecycle.
+        for eff in vfx_list:
+            if isinstance(eff, PrototypeEffect) and eff.layer == "after_avatar":
+                eff.draw(painter)
 
         # Companion staging remains an invisible layout anchor in normal play.
 
@@ -438,7 +450,11 @@ class CombatArenaWidget(QWidget):
             )
 
         for eff in vfx_list:
-            if isinstance(eff, PrototypeEffect) and not isinstance(eff, (AreaEffect, ImpactEffect)):
+            if (
+                isinstance(eff, PrototypeEffect)
+                and not isinstance(eff, (AreaEffect, ImpactEffect))
+                and eff.layer not in ("before_avatar", "after_avatar")
+            ):
                 eff.draw(painter)
 
         # Impact/explosion is a distinct layer above the attack travel.

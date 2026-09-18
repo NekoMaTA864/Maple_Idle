@@ -10,7 +10,7 @@ import time
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
-    QHBoxLayout,
+    QGridLayout,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -21,7 +21,13 @@ from PySide6.QtWidgets import (
 from arena_layout import ArenaLayout
 from combat_vfx_manager import VisualEffectManager
 from ui_arena import CombatArenaWidget
-from vfx_prototype import ImpactEffect, PRESETS, emit_vfx, resolve_preset
+from vfx_prototype import (
+    ImpactEffect,
+    PRESETS,
+    ProjectileEffect,
+    emit_vfx,
+    resolve_preset,
+)
 
 
 class GalleryMember:
@@ -136,12 +142,24 @@ class GalleryCombatState:
 
 class VFXGalleryWindow(QMainWindow):
     PRESET_ORDER = (
-        ("Hero Slash", "hero_slash"),
-        ("Night Lord Shuriken", "night_lord_shuriken"),
-        ("Heavy Cannonball", "cannonball_heavy"),
-        ("Bishop Holy Area", "bishop_holy_area"),
+        ("狂暴攻擊", "hero_rage_attack"),
+        ("劍之幻象", "hero_sword_illusion"),
+        ("燃燒靈魂之劍", "hero_burning_soul_sword"),
+        ("空間斬", "hero_spatial_slash"),
+        ("鬥氣本能", "hero_fighting_instinct"),
+        ("聖劍降臨", "hero_sacred_sword_descent"),
+        ("舊版英雄斬擊", "hero_slash"),
+        ("夜使者手裏劍", "night_lord_shuriken"),
+        ("重型加農砲彈", "cannonball_heavy"),
+        ("主教神聖領域", "bishop_holy_area"),
     )
     PRESET_BINDINGS = {
+        "hero_rage_attack": ("hero", "tip", "hit"),
+        "hero_sword_illusion": ("hero", "tip", "hit"),
+        "hero_burning_soul_sword": ("hero", "attack_origin", "hit"),
+        "hero_spatial_slash": ("hero", "tip", "hit"),
+        "hero_fighting_instinct": ("hero", "center", "hit"),
+        "hero_sacred_sword_descent": ("hero", "tip", "hit"),
         "hero_slash": ("hero", "tip", "hit"),
         "night_lord_shuriken": ("night_lord", "attack_origin", "hit"),
         "cannonball_heavy": ("cannon", "muzzle", "hit"),
@@ -150,7 +168,7 @@ class VFXGalleryWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("MapleIdle — Vertical VFX Debug Gallery")
+        self.setWindowTitle("MapleIdle｜VFX 視覺檢視 Gallery")
         self.resize(760, 760)
         self.setMinimumSize(680, 650)
         self.setStyleSheet(
@@ -178,24 +196,24 @@ class VFXGalleryWindow(QMainWindow):
         layout.setSpacing(8)
 
         heading = QLabel(
-            "<b style='font-size: 16px; color: #ffd75a;'>Vertical Battle VFX Prototype</b>"
-            "<br><span style='color: #94a3b8;'>Enemy / Boss top -> combat space -> player bottom</span>"
+            "<b style='font-size: 16px; color: #ffd75a;'>垂直戰場 VFX 視覺檢視</b>"
+            "<br><span style='color: #94a3b8;'>敵人／Boss 上方 → 戰鬥區域 → 玩家下方</span>"
         )
         layout.addWidget(heading)
         layout.addWidget(self.arena, 1)
 
-        button_row = QHBoxLayout()
-        for label, preset in self.PRESET_ORDER:
+        button_grid = QGridLayout()
+        for index, (label, preset) in enumerate(self.PRESET_ORDER):
             button = QPushButton(label)
             button.clicked.connect(lambda _checked=False, name=preset: self.play_preset(name))
-            button_row.addWidget(button)
-        layout.addLayout(button_row)
+            button_grid.addWidget(button, index // 3, index % 3)
+        layout.addLayout(button_grid)
 
-        replay = QPushButton("Replay")
+        replay = QPushButton("重播")
         replay.clicked.connect(self.replay)
         layout.addWidget(replay)
 
-        self.status_label = QLabel("Gallery only: no save, progression, or CombatManager state")
+        self.status_label = QLabel("僅限 Gallery：不使用存檔、成長資料或 CombatManager")
         self.status_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         layout.addWidget(self.status_label)
 
@@ -214,7 +232,86 @@ class VFXGalleryWindow(QMainWindow):
         target = self.arena.enemy_anchor(target_anchor, index=1, total=3)
 
         effects = []
-        if preset_name == "night_lord_shuriken":
+        if preset_name == "hero_sword_illusion":
+            # The delayed copies are separate presentation effects.  Their
+            # timing proves the phantom read without a combo counter or hit
+            # count in the gallery.
+            main = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(main)
+            for index, (delay, size, alpha_scale) in enumerate(
+                ((0.13, 98.0, 0.48), (0.26, 92.0, 0.38)), start=1
+            ):
+                effects.append(emit_vfx(
+                    self.state.vfx_mgr,
+                    definition,
+                    source,
+                    target,
+                    delay=delay,
+                    size=size,
+                    alpha_scale=alpha_scale,
+                    seed=int(definition.params["seed"]) + index,
+                ))
+            self._add_delayed_impact(target, 34, (130, 183, 255), 0.38, 700, 0.38)
+        elif preset_name == "hero_burning_soul_sword":
+            # Ignition, retained sword, and one optional-looking flame trail
+            # are all presentation effects with independent lifecycles.
+            ignition = ImpactEffect(
+                source, size=38, lifetime=0.46, color=(255, 142, 55), seed=2107
+            )
+            self.state.vfx_mgr.add_effect(ignition)
+            effects.append(ignition)
+            persistent = emit_vfx(
+                self.state.vfx_mgr,
+                definition,
+                self.arena.avatar_anchor("center"),
+                offset=(self.arena.width() * 0.15, -self.arena.height() * 0.018),
+            )
+            effects.append(persistent)
+            soul_source = self.arena.avatar_anchor("center")
+            soul_source = (
+                soul_source[0] + self.arena.width() * 0.15,
+                soul_source[1] - self.arena.height() * 0.018,
+            )
+            followup = ProjectileEffect(
+                soul_source,
+                target,
+                lifetime=0.27,
+                delay=0.10,
+                speed=720.0,
+                size=18.0,
+                trail=True,
+                trail_length=0.18,
+                shape="sword",
+                color=(255, 159, 64),
+                seed=2108,
+            )
+            self.state.vfx_mgr.add_effect(followup)
+            effects.append(followup)
+            self._add_delayed_impact(target, 20, (255, 145, 64), 0.16, 2108 + 700, 0.33)
+        elif preset_name == "hero_fighting_instinct":
+            burst = ImpactEffect(
+                source, size=52, lifetime=0.42, color=(116, 228, 255), seed=2109
+            )
+            self.state.vfx_mgr.add_effect(burst)
+            effects.append(burst)
+            effects.append(emit_vfx(
+                self.state.vfx_mgr,
+                definition,
+                self.arena.avatar_anchor("center"),
+                size=min(self.arena.width() * 0.12, 96.0),
+            ))
+        elif preset_name == "hero_sacred_sword_descent":
+            # The source is derived from the target and arena size so the
+            # blade remains a vertical descent at every gallery resolution.
+            descent_source = (target[0], target[1] - self.arena.height() * 0.15)
+            descent = emit_vfx(self.state.vfx_mgr, definition, descent_source, target)
+            effects.append(descent)
+            self._add_delayed_impact(target, 62, (167, 225, 255), 0.22, 2110, 0.40)
+        elif preset_name == "hero_spatial_slash":
+            spatial = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(spatial)
+            self._add_delayed_impact(target, 52, (105, 204, 255), 0.30, 2111, 0.31)
+        elif preset_name == "night_lord_shuriken":
             # Three presentation-only throws prove the rapid-fire read without
             # introducing hit-count or multi-hit gameplay semantics.
             for index in range(3):
@@ -229,10 +326,10 @@ class VFXGalleryWindow(QMainWindow):
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
             self.state.queue_impact(effect, size=50, color=(255, 155, 74), lifetime=0.38)
-        elif preset_name == "hero_slash":
+        elif preset_name in ("hero_slash", "hero_rage_attack"):
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
-            self.state.queue_impact(effect, size=30, color=(255, 225, 130), lifetime=0.26)
+            self._add_delayed_impact(target, 30, (255, 225, 130), 0.26, 2112, 0.55)
         else:
             # Area presets resolve their visual center from the enemy ground
             # target; source remains the avatar cast anchor for the request.
@@ -241,13 +338,29 @@ class VFXGalleryWindow(QMainWindow):
         effect = effects[-1]
         slot_index = [name for _label, name in self.PRESET_ORDER].index(preset_name)
         self.arena.set_skill_label(slot_index, f"S{slot_index + 1}")
-        cooldown = max(effect.duration + getattr(effect, "delay", 0.0) for effect in effects)
-        self.arena.set_skill_cooldown(slot_index, cooldown, cooldown)
-        self.state.add_popup(definition.name.replace("_", " ").title())
+        display_name = dict((preset, label) for label, preset in self.PRESET_ORDER)[preset_name]
+        primitive_names = {
+            "slash": "斬擊",
+            "projectile": "投射物",
+            "area": "地面範圍",
+            "persistent": "持續效果",
+        }
+        self.state.add_popup(display_name)
         self.status_label.setText(
-            f"Preset: {definition.name} | primitive: {definition.effect_type} | "
-            "presentation-only"
+            f"目前效果：{display_name}｜類型：{primitive_names.get(definition.effect_type, definition.effect_type)}｜"
+            "僅限視覺展示"
         )
+
+    def _add_delayed_impact(self, target, size, color, lifetime, seed, delay=0.0):
+        """Add an impact with the formal effect lifecycle, not a skill timer."""
+        self.state.vfx_mgr.add_effect(ImpactEffect(
+            target,
+            size=size,
+            color=color,
+            lifetime=lifetime,
+            seed=seed,
+            delay=delay,
+        ))
 
     def replay(self):
         if self.current_preset:
