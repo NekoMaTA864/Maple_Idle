@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="MapleIdle Hero 三套 Build 的視覺複核、比較與設計備註頁面。">
+  <title>Hero Build 視覺複核／設計頁</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./review.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="back-link" href="../index.html">← 返回 Showcase</a>
+      <span class="eyebrow">MAPLEIDLE / HERO REVIEW</span>
+      <h1>Hero Build 視覺複核／設計頁</h1>
+      <p class="lede">用現有 capture 的 PNG／WebM，逐一檢查三套流派的節奏、辨識度、持續感與視覺重量。</p>
+    </div>
+  </header>
+
+  <main id="app" class="app-shell" aria-busy="true">
+    <section class="toolbar panel" aria-labelledby="view-controls-title">
+      <div>
+        <p class="section-kicker">瀏覽方式</p>
+        <h2 id="view-controls-title">選擇審核視角</h2>
+      </div>
+      <div class="toolbar-controls">
+        <label>
+          <span>顯示模式</span>
+          <select id="mode-select">
+            <option value="single">單一 Build 檢視</option>
+            <option value="compare">並排比較（三套）</option>
+            <option value="focus">焦點比較（兩套）</option>
+          </select>
+        </label>
+        <label id="single-build-control">
+          <span>檢視 Build</span>
+          <select id="single-build-select"></select>
+        </label>
+        <div id="focus-build-controls" class="focus-controls" hidden>
+          <label>
+            <span>左側 Build</span>
+            <select id="focus-a-select"></select>
+          </label>
+          <label>
+            <span>右側 Build</span>
+            <select id="focus-b-select"></select>
+          </label>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button id="export-review" class="button button-primary" type="button">匯出 Review JSON</button>
+        <button id="import-review" class="button" type="button">匯入 Review JSON</button>
+        <button id="reset-review" class="button button-danger" type="button">清除本機 Review</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p id="status-message" class="status-message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="comparison-observations" class="panel" aria-labelledby="comparison-title">
+      <div class="section-heading">
+        <p class="section-kicker">全域比較</p>
+        <h2 id="comparison-title">比較觀察</h2>
+        <p>先確認三套 Build 的設計意圖，再用影片與 review 欄位核對實際觀感。</p>
+      </div>
+      <div id="observation-grid" class="observation-grid"></div>
+    </section>
+
+    <section class="build-section" aria-labelledby="builds-title">
+      <div class="section-heading build-section-heading">
+        <div>
+          <p class="section-kicker">視覺樣本</p>
+          <h2 id="builds-title">Hero Build 預覽</h2>
+        </div>
+        <p id="view-summary" class="view-summary"></p>
+      </div>
+      <div id="build-grid" class="build-grid" aria-live="polite">
+        <div class="loading-state">正在載入 Hero 視覺資料……</div>
+      </div>
+    </section>
+
+    <section class="panel checklist-panel" aria-labelledby="checklist-title">
+      <div class="section-heading">
+        <p class="section-kicker">人工複核</p>
+        <h2 id="checklist-title">Review Checklist</h2>
+        <p>勾選代表目前影片已通過這項觀察；狀態會保存在此瀏覽器。</p>
+      </div>
+      <div id="checklist" class="checklist"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>這是靜態視覺 review 工具。文案編輯與備註只存在本機 localStorage，不會改寫正式戰鬥資料。</p>
+  </footer>
+
+  <noscript>
+    <div class="noscript-warning">此頁需要啟用 JavaScript，才能載入 Hero Build 資料與 review 工具。</div>
+  </noscript>
+</body>
+</html>

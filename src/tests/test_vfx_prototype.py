@@ -22,6 +22,7 @@ from vfx_prototype import (
     ImpactEffect,
     LightningEffect,
     PRESETS,
+    PersistentEffect,
     ProjectileEffect,
     SlashEffect,
     create_effect,
@@ -73,6 +74,12 @@ class TestVerticalVFXPrototype(unittest.TestCase):
     def test_all_required_presets_resolve_to_presentation_types(self):
         expected = {
             "hero_slash": SlashEffect,
+            "hero_rage_attack": SlashEffect,
+            "hero_sword_illusion": SlashEffect,
+            "hero_burning_soul_sword": PersistentEffect,
+            "hero_spatial_slash": SlashEffect,
+            "hero_fighting_instinct": PersistentEffect,
+            "hero_sacred_sword_descent": ProjectileEffect,
             "night_lord_shuriken": ProjectileEffect,
             "cannonball_heavy": ProjectileEffect,
             "bishop_holy_area": AreaEffect,
@@ -82,6 +89,21 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             self.assertEqual(definition.effect_type, PRESETS[name].effect_type)
             effect = create_effect(name, (400, 480), (400, 120))
             self.assertIsInstance(effect, effect_type)
+
+    def test_hero_presets_keep_variants_in_presentation_data(self):
+        spatial = create_effect("hero_spatial_slash", (400, 480), (400, 120))
+        spatial.set_progress(0.5)
+        self.assertEqual(spatial.style, "rift")
+        self.assertEqual(spatial.variant, "normal")
+
+        empowered = create_effect(
+            "hero_spatial_slash", (400, 480), (400, 120), variant="empowered"
+        )
+        self.assertEqual(empowered.variant, "empowered")
+        sacred = create_effect(
+            "hero_sacred_sword_descent", (400, 300), (400, 120), variant="stronger"
+        )
+        self.assertEqual(sacred.variant, "stronger")
 
     def test_presets_contain_no_gameplay_parameters(self):
         forbidden = {"damage", "cooldown", "hit_count", "buff", "priority", "progression"}
@@ -142,6 +164,28 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         effect.update(0.25)
         self.assertFalse(effect.is_alive)
 
+    def test_delayed_effect_waits_then_expires(self):
+        effect = ImpactEffect((400, 160), lifetime=0.3, delay=0.2)
+        effect.update(0.1)
+        self.assertTrue(effect.is_alive)
+        self.assertFalse(effect.has_started)
+        effect.update(0.1001)
+        self.assertTrue(effect.has_started)
+        self.assertLess(effect.progress, 0.001)
+        effect.update(0.3)
+        self.assertFalse(effect.is_alive)
+
+    def test_persistent_presentation_can_be_cleared(self):
+        manager = VisualEffectManager()
+        aura = PersistentEffect((400, 420), style="aura", lifetime=8.0)
+        sword = PersistentEffect((400, 420), style="sword", lifetime=8.0)
+        manager.add_effect(aura)
+        manager.add_effect(sword)
+        manager.update(1.0)
+        self.assertEqual({effect.layer for effect in manager.effects}, {"before_avatar", "after_avatar"})
+        manager.clear()
+        self.assertEqual(manager.effects, [])
+
     def test_cannonball_creates_presentation_impact_on_arrival(self):
         state = GalleryCombatState()
         cannonball = create_effect("cannonball_heavy", (400, 400), (400, 140))
@@ -181,6 +225,10 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             ProjectileEffect((400, 500), (250, 150), lifetime=1.0, trail=True),
             AreaEffect((400, 160)),
             LightningEffect((400, 500), (550, 120), branching=True),
+            PersistentEffect((400, 420), style="aura"),
+            PersistentEffect((460, 420), style="sword"),
+            create_effect("hero_spatial_slash", (400, 500), (400, 120)),
+            create_effect("hero_sacred_sword_descent", (400, 30), (400, 120)),
         ]
         painter = QPainter(image)
         try:
@@ -199,6 +247,54 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         hp_before = state.player.team[0].current_hp
         state.update_presentation(0.2)
         self.assertEqual(state.player.team[0].current_hp, hp_before)
+
+    def test_gallery_exposes_each_hero_skill_without_combat_manager(self):
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        hero_presets = {
+            "hero_rage_attack",
+            "hero_sword_illusion",
+            "hero_burning_soul_sword",
+            "hero_spatial_slash",
+            "hero_fighting_instinct",
+            "hero_sacred_sword_descent",
+        }
+        listed = {preset for _label, preset in VFXGalleryWindow.PRESET_ORDER}
+        self.assertTrue(hero_presets.issubset(listed))
+        self.assertFalse(hasattr(VFXGalleryWindow, "combat_mgr"))
+
+    def test_gallery_uses_chinese_display_names_for_review(self):
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        labels = {preset: label for label, preset in VFXGalleryWindow.PRESET_ORDER}
+        self.assertEqual(labels["hero_rage_attack"], "狂暴攻擊")
+        self.assertEqual(labels["hero_sword_illusion"], "劍之幻象")
+        self.assertEqual(labels["hero_burning_soul_sword"], "燃燒靈魂之劍")
+        self.assertEqual(labels["hero_spatial_slash"], "空間斬")
+        self.assertEqual(labels["hero_fighting_instinct"], "鬥氣本能")
+        self.assertEqual(labels["hero_sacred_sword_descent"], "聖劍降臨")
+
+    def test_gallery_hero_triggers_build_presentation_compositions(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        expected_counts = {
+            "hero_rage_attack": 2,
+            "hero_sword_illusion": 4,
+            "hero_burning_soul_sword": 4,
+            "hero_spatial_slash": 2,
+            "hero_fighting_instinct": 2,
+            "hero_sacred_sword_descent": 2,
+        }
+        for preset, expected_count in expected_counts.items():
+            window.play_preset(preset)
+            self.assertEqual(len(window.state.vfx_mgr.effects), expected_count)
+            for effect in window.state.vfx_mgr.effects:
+                self.assertFalse(any(hasattr(effect, name) for name in (
+                    "damage", "cooldown", "hit_count", "buff", "resource", "progression"
+                )))
+        window.close()
 
 
 if __name__ == "__main__":

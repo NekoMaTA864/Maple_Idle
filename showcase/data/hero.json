@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "prototype": "Hero",
+  "title": "MapleIdle Combat Prototype",
+  "builds": [
+    {
+      "id": "stable-cycle",
+      "name": "穩定循環",
+      "summary": "以基礎斬擊、幻象與空間斬維持清楚且穩定的近戰節奏。",
+      "accent": "#72baff",
+      "preview": {
+        "status": "ready",
+        "video": "assets/hero/stable.webm?v=formal-main-736x440",
+        "poster": "assets/hero/stable.png?v=formal-main-736x440",
+        "label": "WebM preview"
+      },
+      "skills": [
+        { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },
+        { "slot": "W", "id": "hero_sword_illusion", "name": "劍之幻象" },
+        { "slot": "E", "id": "hero_spatial_slash", "name": "空間斬" },
+        { "slot": "R", "id": "hero_burning_soul_sword", "name": "燃燒靈魂之劍" }
+      ]
+    },
+    {
+      "id": "sustained-output",
+      "name": "持續輸出",
+      "summary": "讓燃燒靈魂與鬥氣本能成為畫面中的持續存在，強調長線輸出感。",
+      "accent": "#ffad68",
+      "preview": {
+        "status": "ready",
+        "video": "assets/hero/sustain.webm?v=formal-main-736x440",
+        "poster": "assets/hero/sustain.png?v=formal-main-736x440",
+        "label": "WebM preview"
+      },
+      "skills": [
+        { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },
+        { "slot": "W", "id": "hero_sword_illusion", "name": "劍之幻象" },
+        { "slot": "E", "id": "hero_burning_soul_sword", "name": "燃燒靈魂之劍" },
+        { "slot": "R", "id": "hero_fighting_instinct", "name": "鬥氣本能" }
+      ]
+    },
+    {
+      "id": "burst",
+      "name": "爆發",
+      "summary": "以高鬥氣空間斬、鬥氣本能與聖劍降臨堆出短時間的爆發峰值。",
+      "accent": "#d99bff",
+      "preview": {
+        "status": "ready",
+        "video": "assets/hero/burst.webm?v=formal-main-736x440",
+        "poster": "assets/hero/burst.png?v=formal-main-736x440",
+        "label": "WebM preview"
+      },
+      "skills": [
+        { "slot": "Q", "id": "hero_rage_attack", "name": "狂暴攻擊" },
+        { "slot": "W", "id": "hero_spatial_slash", "name": "空間斬" },
+        { "slot": "E", "id": "hero_fighting_instinct", "name": "鬥氣本能" },
+        { "slot": "R", "id": "hero_sacred_sword_descent", "name": "聖劍降臨" }
+      ]
+    }
+  ]
+}

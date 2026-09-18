@@ -100,15 +100,22 @@ class SlashEffect(PrototypeEffect):
     primitive = "slash"
 
     def __init__(self, source, target=None, size=84.0, lifetime=0.55, arc=115.0,
-                 angle=None, fade=True, color=(255, 220, 120), seed=101, delay=0.0):
+                 angle=None, fade=True, color=(255, 220, 120), seed=101, delay=0.0,
+                 style="ribbon", variant="normal", alpha_scale=1.0):
         super().__init__(source, target, lifetime=lifetime, color=color, seed=seed, delay=delay)
         self.size = float(size)
         self.arc = float(arc)
         self.angle = None if angle is None else float(angle)
         self.fade = bool(fade)
+        self.style = str(style)
+        self.variant = str(variant)
+        self.alpha_scale = max(0.0, float(alpha_scale))
 
     def draw(self, painter) -> None:
         if not self.has_started:
+            return
+        if self.style == "rift":
+            self._draw_rift(painter)
             return
         progress = self.progress
         center = _lerp(self.source, self.target, min(1.0, progress * 1.2))
@@ -117,7 +124,7 @@ class SlashEffect(PrototypeEffect):
         direction = self.angle if self.angle is not None else math.degrees(math.atan2(dy, dx))
         sweep = self.arc * min(1.0, 0.30 + progress * 1.05)
         radius = self.size * (0.66 + 0.18 * math.sin(progress * math.pi))
-        alpha = int(255 * ((1.0 - progress) if self.fade else 1.0))
+        alpha = int(255 * ((1.0 - progress) if self.fade else 1.0) * self.alpha_scale)
 
         # A short trailing ribbon gives the strike a direction instead of a
         # static fan silhouette.
@@ -150,6 +157,45 @@ class SlashEffect(PrototypeEffect):
                 self.color, alpha, aspect=0.30, rings=1,
             )
 
+    def _draw_rift(self, painter) -> None:
+        """Draw the sandbox-proven spatial slash geometry as a slash style.
+
+        This remains a reusable SlashEffect variant: it does not know about
+        Hero resources or any skill/runtime state.
+        """
+        progress = self.progress
+        settings = {
+            "normal": (0.88, 1, 105, 1.0),
+            "empowered": (1.08, 2, 145, 1.12),
+            "maximum": (1.34, 2, 195, 1.28),
+        }
+        scale, layer_count, base_alpha, width_scale = settings.get(
+            self.variant, settings["normal"]
+        )
+        fade = min(1.0, progress / 0.12) * min(1.0, (1.0 - progress) / 0.22)
+        fade *= self.alpha_scale
+        center = self.target
+        painter.save()
+        for layer in range(layer_count):
+            offset = (layer - (layer_count - 1) / 2.0) * self.size * 0.10
+            radius_x = self.size * 0.92 * scale
+            radius_y = self.size * 0.22 * scale
+            path = QPainterPath(QPointF(center[0] - radius_x, center[1] + radius_y + offset))
+            path.lineTo(QPointF(center[0] - radius_x * 0.36, center[1] - radius_y * 0.35 + offset))
+            path.lineTo(QPointF(center[0] + radius_x * 0.10, center[1] + radius_y * 0.22 + offset))
+            path.lineTo(QPointF(center[0] + radius_x, center[1] - radius_y - offset))
+            painter.setPen(QPen(
+                _color(self.color, int(base_alpha * fade)),
+                max(4.0, self.size * 0.058 * width_scale),
+            ))
+            painter.drawPath(path)
+            painter.setPen(QPen(
+                QColor(218, 249, 255, int(230 * fade)),
+                max(1.5, self.size * 0.020),
+            ))
+            painter.drawPath(path)
+        painter.restore()
+
 
 class ProjectileEffect(PrototypeEffect):
     """A source-to-target projectile with optional trail and homing target."""
@@ -158,7 +204,7 @@ class ProjectileEffect(PrototypeEffect):
 
     def __init__(self, source, target, speed=420.0, size=14.0, lifetime=None,
                  trail=False, homing=False, color=(160, 220, 255), seed=202,
-                 shape="default", trail_length=0.12, delay=0.0):
+                 shape="default", trail_length=0.12, delay=0.0, variant="normal"):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -177,6 +223,7 @@ class ProjectileEffect(PrototypeEffect):
         self.homing = bool(homing)
         self.shape = str(shape)
         self.trail_length = max(0.02, float(trail_length))
+        self.variant = str(variant)
 
     @property
     def position(self) -> Point:
@@ -225,6 +272,10 @@ class ProjectileEffect(PrototypeEffect):
             self._draw_cannonball(painter, position, alpha)
             return
 
+        if self.shape == "sword":
+            self._draw_sword(painter, position, alpha, nx, ny, px, py)
+            return
+
         path = QPainterPath()
         path.moveTo(QPointF(*tip))
         path.lineTo(QPointF(*left))
@@ -257,6 +308,50 @@ class ProjectileEffect(PrototypeEffect):
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(QColor(255, 234, 170, int(alpha * 0.55)), max(1.0, radius * 0.08)))
         painter.drawEllipse(QPointF(*position), radius * 0.72, radius * 0.72)
+        painter.restore()
+
+    def _draw_sword(self, painter, position, alpha, nx, ny, px, py):
+        """Draw a reusable descending blade projectile with a guard."""
+        variant_scale = {
+            "normal": 0.86,
+            "stronger": 1.08,
+            "maximum": 1.24,
+            "max_rage": 1.08,
+            "instinct": 1.24,
+        }.get(getattr(self, "variant", "normal"), 0.86)
+        blade_length = self.size * 3.0 * variant_scale
+        blade_width = self.size * 0.52 * variant_scale
+        base = (
+            position[0] - nx * blade_length,
+            position[1] - ny * blade_length,
+        )
+        guard = (
+            position[0] - nx * blade_length * 0.78,
+            position[1] - ny * blade_length * 0.78,
+        )
+        tip = (position[0] + nx * self.size * 0.12, position[1] + ny * self.size * 0.12)
+        blade = QPainterPath(QPointF(base[0] + px * blade_width, base[1] + py * blade_width))
+        blade.lineTo(QPointF(base[0] - px * blade_width, base[1] - py * blade_width))
+        blade.lineTo(QPointF(tip[0], tip[1]))
+        blade.closeSubpath()
+
+        painter.save()
+        _draw_bloom_line(
+            painter,
+            base,
+            tip,
+            self.size * 0.56 * variant_scale,
+            self.color,
+            int(alpha * 0.70),
+        )
+        painter.setBrush(QBrush(_color(self.color, alpha)))
+        painter.setPen(QPen(QColor(255, 255, 225, alpha), max(1.2, self.size * 0.055)))
+        painter.drawPath(blade)
+        painter.setPen(QPen(QColor(255, 210, 115, alpha), max(2.0, self.size * 0.16)))
+        painter.drawLine(
+            QPointF(guard[0] - px * self.size * 1.35, guard[1] - py * self.size * 1.35),
+            QPointF(guard[0] + px * self.size * 1.35, guard[1] + py * self.size * 1.35),
+        )
         painter.restore()
 
 
@@ -374,8 +469,8 @@ class ImpactEffect(PrototypeEffect):
     layer = "impact"
 
     def __init__(self, position, size=26.0, lifetime=0.30, flash=True,
-                 ring=True, burst=True, color=(255, 220, 130), seed=505):
-        super().__init__(position, position, lifetime=lifetime, color=color, seed=seed)
+                 ring=True, burst=True, color=(255, 220, 130), seed=505, delay=0.0):
+        super().__init__(position, position, lifetime=lifetime, color=color, seed=seed, delay=delay)
         self.position = _point(position)
         self.size = max(1.0, float(size))
         self.flash = bool(flash)
@@ -413,6 +508,74 @@ class ImpactEffect(PrototypeEffect):
         painter.restore()
 
 
+class PersistentEffect(PrototypeEffect):
+    """A reusable retained presentation visual with normal manager cleanup.
+
+    ``style`` intentionally describes a visual family (currently ``aura`` or
+    ``sword``), not a Hero state.  Callers own the lifetime they want to show;
+    the effect never grants a buff, resource, cooldown, or gameplay outcome.
+    """
+
+    primitive = "persistent"
+
+    def __init__(self, position, style="aura", lifetime=8.0, size=72.0,
+                 color=(120, 220, 255), pulse_speed=2.0, offset=(0.0, 0.0),
+                 layer=None, seed=606, delay=0.0):
+        super().__init__(position, position, lifetime=lifetime, color=color, seed=seed, delay=delay)
+        self.position = _point(position)
+        self.style = str(style)
+        self.size = max(1.0, float(size))
+        self.pulse_speed = float(pulse_speed)
+        self.offset = _point(offset)
+        self.layer = str(layer or ("before_avatar" if self.style == "aura" else "after_avatar"))
+
+    def draw(self, painter) -> None:
+        if not self.has_started:
+            return
+        elapsed = self.duration * self.progress
+        pulse = 0.72 + 0.28 * math.sin(elapsed * self.pulse_speed)
+        x = self.position[0] + self.offset[0]
+        y = self.position[1] + self.offset[1]
+        painter.save()
+        if self.style == "sword":
+            self._draw_sword(painter, x, y, pulse)
+        else:
+            self._draw_aura(painter, x, y, pulse)
+        painter.restore()
+
+    def _draw_sword(self, painter, x, y, pulse):
+        blade_height = self.size * 1.45
+        blade_width = self.size * 0.20
+        top = y - blade_height * 0.5
+        bottom = y + blade_height * 0.5
+        painter.setPen(QPen(QColor(255, 109, 53, int(85 * pulse)), max(6.0, self.size * 0.34), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(x, top), QPointF(x, bottom))
+        blade = QPainterPath()
+        blade.moveTo(QPointF(x - blade_width, top))
+        blade.lineTo(QPointF(x + blade_width, top))
+        blade.lineTo(QPointF(x, bottom + blade_width * 0.9))
+        blade.closeSubpath()
+        painter.setBrush(QColor(255, 188, 91, int(210 * pulse)))
+        painter.setPen(QPen(QColor(255, 246, 186, int(235 * pulse)), 1.3))
+        painter.drawPath(blade)
+        painter.setPen(QPen(QColor(255, 105, 45, int(220 * pulse)), max(1.5, self.size * 0.07), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(x - blade_width * 2.1, y), QPointF(x + blade_width * 2.1, y))
+
+    def _draw_aura(self, painter, x, y, pulse):
+        radius_x = self.size * (1.0 + 0.012 * pulse)
+        radius_y = self.size * (0.30 + 0.008 * pulse)
+        painter.setBrush(QColor(81, 204, 255, int(16 * pulse)))
+        painter.setPen(QPen(QColor(126, 235, 255, int(92 * pulse)), max(1.5, self.size * 0.035), Qt.DashLine))
+        painter.drawEllipse(QRectF(x - radius_x, y - radius_y, radius_x * 2, radius_y * 2))
+        painter.setPen(QPen(QColor(207, 252, 255, int(95 * pulse)), max(1.0, self.size * 0.022), Qt.SolidLine, Qt.RoundCap))
+        for angle in (-35, 35, 145, 215):
+            direction = QPointF(math.cos(math.radians(angle)), math.sin(math.radians(angle)))
+            painter.drawLine(
+                QPointF(x + direction.x() * radius_x * 0.65, y + direction.y() * radius_y * 0.65),
+                QPointF(x + direction.x() * radius_x * 0.92, y + direction.y() * radius_y * 0.92),
+            )
+
+
 @dataclass(frozen=True)
 class VFXPreset:
     """Presentation-only construction data for a reusable visual."""
@@ -426,6 +589,35 @@ PRESETS = {
     "hero_slash": VFXPreset(
         "hero_slash", "slash",
         {"size": 104.0, "lifetime": 0.55, "arc": 118.0, "color": (255, 215, 90), "seed": 1101},
+    ),
+    "hero_rage_attack": VFXPreset(
+        "hero_rage_attack", "slash",
+        {"size": 104.0, "lifetime": 0.55, "arc": 118.0, "color": (255, 215, 90), "seed": 2101},
+    ),
+    "hero_sword_illusion": VFXPreset(
+        "hero_sword_illusion", "slash",
+        {"size": 104.0, "lifetime": 0.55, "arc": 118.0, "color": (255, 224, 130), "seed": 2102},
+    ),
+    "hero_burning_soul_sword": VFXPreset(
+        "hero_burning_soul_sword", "persistent",
+        {"style": "sword", "lifetime": 8.0, "size": 28.0,
+         "color": (255, 142, 55), "layer": "after_avatar", "seed": 2103},
+    ),
+    "hero_spatial_slash": VFXPreset(
+        "hero_spatial_slash", "slash",
+        {"style": "rift", "variant": "normal", "size": 112.0, "lifetime": 0.52,
+         "color": (105, 204, 255), "seed": 2104},
+    ),
+    "hero_fighting_instinct": VFXPreset(
+        "hero_fighting_instinct", "persistent",
+        {"style": "aura", "lifetime": 8.0, "size": 88.0,
+         "color": (116, 228, 255), "layer": "before_avatar", "seed": 2105},
+    ),
+    "hero_sacred_sword_descent": VFXPreset(
+        "hero_sacred_sword_descent", "projectile",
+        {"speed": 560.0, "size": 28.0, "lifetime": 0.38, "trail": True,
+         "trail_length": 0.20, "shape": "sword", "variant": "normal",
+         "color": (189, 232, 255), "seed": 2106},
     ),
     "night_lord_shuriken": VFXPreset(
         "night_lord_shuriken", "projectile",
@@ -466,6 +658,8 @@ def create_effect(preset: str | VFXPreset, source, target=None, **overrides) -> 
         # Area presets target a battlefield region; an explicit center wins,
         # otherwise use the target point when one is supplied.
         return AreaEffect(params.pop("center", target if target is not None else source), **params)
+    if definition.effect_type == "persistent":
+        return PersistentEffect(source, **params)
     raise ValueError(f"Unsupported VFX preset type: {definition.effect_type}")
 
 
@@ -481,6 +675,7 @@ __all__ = [
     "ImpactEffect",
     "LightningEffect",
     "PRESETS",
+    "PersistentEffect",
     "ProjectileEffect",
     "PrototypeEffect",
     "SlashEffect",

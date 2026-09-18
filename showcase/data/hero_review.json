@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "prototype": "Hero",
+  "title": "Hero Build 視覺複核／設計頁",
+  "builds": [
+    {
+      "id": "stable-cycle",
+      "name": "穩定循環",
+      "summary": "以基礎斬擊、幻象與空間裂斬維持清楚、規律的近戰循環。",
+      "visualGoal": "讓每次施放都有可預期的斬擊回饋，並以中等峰值維持穩定輸出感。",
+      "identity": "規律的劍術節奏：主斬、幻影與空間裂斬依序交替。",
+      "preview": {
+        "label": "穩定循環預覽",
+        "poster": "../assets/hero/stable.png?v=formal-main-736x440",
+        "alt": "穩定循環 Hero 視覺預覽"
+      },
+      "video": "../assets/hero/stable.webm?v=formal-main-736x440",
+      "skills": [
+        {
+          "slot": "Q",
+          "id": "hero_rage_attack",
+          "name": "狂暴攻擊",
+          "role": "基礎主斬",
+          "visualNote": "清楚、快速的主劍斬擊，作為整套循環的節拍。"
+        },
+        {
+          "slot": "W",
+          "id": "hero_sword_illusion",
+          "name": "劍之幻象",
+          "role": "延遲幻影",
+          "visualNote": "主斬後追加淡化幻影，拉出規律但不厚重的尾奏。"
+        },
+        {
+          "slot": "E",
+          "id": "hero_spatial_slash",
+          "name": "空間斬",
+          "role": "中段裂斬",
+          "visualNote": "以空間裂痕提供循環中的中等視覺峰值。"
+        },
+        {
+          "slot": "R",
+          "id": "hero_burning_soul_sword",
+          "name": "燃燒靈魂之劍",
+          "role": "持續背景層",
+          "visualNote": "燃燒劍作為穩定循環的暖色持續存在。"
+        }
+      ],
+      "strengths": [
+        "節拍容易預測，適合作為 Hero 基準流派。",
+        "主斬與幻影能在不依賴顏色的情況下形成不同層次。",
+        "視覺峰值不會長時間壓過角色本體。"
+      ],
+      "concerns": [
+        "空間斬與幻影斬的節奏是否過於相近？",
+        "燃燒靈魂之劍是否仍只是背景，而沒有搶走主斬焦點？"
+      ],
+      "expectedRhythm": "規律斬擊 → 延遲幻影 → 空間裂斬，視覺峰值中等且週期清楚。"
+    },
+    {
+      "id": "sustained-output",
+      "name": "持續輸出",
+      "summary": "讓燃燒劍與鬥氣 aura 長時間共存，強調角色維持強化狀態的存在感。",
+      "visualGoal": "把持續效果變成畫面的第二層節奏，讓觀者感覺 Hero 一直處於強化狀態。",
+      "identity": "暖色燃燒劍與冷色鬥氣 aura 疊層，長時間維持壓力與強化感。",
+      "preview": {
+        "label": "持續輸出預覽",
+        "poster": "../assets/hero/sustain.png?v=formal-main-736x440",
+        "alt": "持續輸出 Hero 視覺預覽"
+      },
+      "video": "../assets/hero/sustain.webm?v=formal-main-736x440",
+      "skills": [
+        {
+          "slot": "Q",
+          "id": "hero_rage_attack",
+          "name": "狂暴攻擊",
+          "role": "基礎主斬",
+          "visualNote": "在持續效果上方維持明確的近戰打擊節拍。"
+        },
+        {
+          "slot": "W",
+          "id": "hero_sword_illusion",
+          "name": "劍之幻象",
+          "role": "強化幻影",
+          "visualNote": "幻影更密集但仍需保持淡、細，避免蓋過 aura。"
+        },
+        {
+          "slot": "E",
+          "id": "hero_burning_soul_sword",
+          "name": "燃燒靈魂之劍",
+          "role": "持續燃燒劍",
+          "visualNote": "持續燃燒劍是暖色的 retained anchor，應能被持續感知。"
+        },
+        {
+          "slot": "R",
+          "id": "hero_fighting_instinct",
+          "name": "鬥氣本能",
+          "role": "持續 aura",
+          "visualNote": "冷色 aura 應環繞角色但不遮住 Hero 輪廓。"
+        }
+      ],
+      "strengths": [
+        "持續效果容易與短促斬擊區分。",
+        "燃燒劍與 aura 的暖冷對比提供長時間識別點。",
+        "畫面可以同時讀到角色狀態與攻擊節拍。"
+      ],
+      "concerns": [
+        "兩個 persistent visual 疊加後是否過度佔據角色周圍？",
+        "幻影斬是否需要再降低透明度或縮小？"
+      ],
+      "expectedRhythm": "燃燒劍 + 鬥氣 aura 長時間共存，短斬擊穿插其中，整體強化狀態持續。"
+    },
+    {
+      "id": "burst",
+      "name": "爆發",
+      "summary": "以鬥氣本能啟動後的強化空間斬與聖劍降臨，堆出短時間最高視覺峰值。",
+      "visualGoal": "讓觀者不看數值也能感覺這是最重、最短促、最具終結技感的流派。",
+      "identity": "鬥氣啟動 → 空間裂斬放大 → 聖劍垂直降臨的大招高峰。",
+      "preview": {
+        "label": "爆發預覽",
+        "poster": "../assets/hero/burst.png?v=formal-main-736x440",
+        "alt": "爆發 Hero 視覺預覽"
+      },
+      "video": "../assets/hero/burst.webm?v=formal-main-736x440",
+      "skills": [
+        {
+          "slot": "Q",
+          "id": "hero_rage_attack",
+          "name": "狂暴攻擊",
+          "role": "起手節拍",
+          "visualNote": "先用主斬建立爆發前的可讀起手。"
+        },
+        {
+          "slot": "W",
+          "id": "hero_spatial_slash",
+          "name": "空間斬",
+          "role": "強化裂斬",
+          "visualNote": "鬥氣啟動後應呈現更寬、更重的空間裂痕。"
+        },
+        {
+          "slot": "E",
+          "id": "hero_fighting_instinct",
+          "name": "鬥氣本能",
+          "role": "爆發啟動",
+          "visualNote": "cast burst 與 aura 是爆發高峰的前置訊號。"
+        },
+        {
+          "slot": "R",
+          "id": "hero_sacred_sword_descent",
+          "name": "聖劍降臨",
+          "role": "最高重量大招",
+          "visualNote": "垂直落劍與大型 impact 必須是六招中最重的瞬間。"
+        }
+      ],
+      "strengths": [
+        "有明確的啟動、放大、終結三段式峰值。",
+        "聖劍降臨提供與其他兩套不同的垂直構圖。",
+        "不靠單一顏色也能由尺寸、方向與 impact 讀出爆發。"
+      ],
+      "concerns": [
+        "聖劍降臨是否真的比空間斬更有重量？",
+        "鬥氣 aura 是否在爆發期間遮蔽了角色或核心 impact？"
+      ],
+      "expectedRhythm": "鬥氣本能啟動後，強化空間斬與聖劍降臨形成短時間最高視覺峰值。"
+    }
+  ]
+}
