@@ -11,7 +11,7 @@ import random
 from typing import Mapping
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QBrush, QPainterPath, QPen, QRadialGradient
+from PySide6.QtGui import QColor, QBrush, QLinearGradient, QPainterPath, QPen, QRadialGradient
 
 from vfx_core import (
     _draw_bloom_line,
@@ -47,6 +47,29 @@ def _clamp_color(color) -> Color:
 def _color(color: Color, alpha: int) -> QColor:
     r, g, b = _clamp_color(color)
     return QColor(r, g, b, max(0, min(255, int(alpha))))
+
+
+def _draw_angular_wind_streaks(painter, position, nx, ny, px, py, size, color, alpha, count):
+    """Draw short, non-circular wind cuts around a moving projectile."""
+    painter.save()
+    painter.setPen(QPen(_color(color, int(alpha * 0.62)), max(1.0, size * 0.055)))
+    for index in range(max(0, int(count))):
+        side = -1.0 if index % 2 == 0 else 1.0
+        offset = size * (0.42 + index * 0.12)
+        center = (
+            position[0] - nx * size * 0.18 + px * offset * side,
+            position[1] - ny * size * 0.18 + py * offset * side,
+        )
+        start = (
+            center[0] - nx * size * 0.34 - px * size * 0.18 * side,
+            center[1] - ny * size * 0.34 - py * size * 0.18 * side,
+        )
+        end = (
+            center[0] + nx * size * 0.50 + px * size * 0.22 * side,
+            center[1] + ny * size * 0.50 + py * size * 0.22 * side,
+        )
+        painter.drawLine(QPointF(*start), QPointF(*end))
+    painter.restore()
 
 
 class PrototypeEffect:
@@ -205,7 +228,8 @@ class ProjectileEffect(PrototypeEffect):
     def __init__(self, source, target, speed=420.0, size=14.0, lifetime=None,
                  trail=False, homing=False, color=(160, 220, 255), seed=202,
                  shape="default", trail_length=0.12, delay=0.0, variant="normal",
-                 alpha_scale=1.0):
+                 alpha_scale=1.0, spin_rate=980.0, wind_streaks=0,
+                 trail_width_scale=None, style="default"):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -226,6 +250,12 @@ class ProjectileEffect(PrototypeEffect):
         self.trail_length = max(0.02, float(trail_length))
         self.variant = str(variant)
         self.alpha_scale = max(0.0, float(alpha_scale))
+        self.spin_rate = float(spin_rate)
+        self.wind_streaks = max(0, int(wind_streaks))
+        self.trail_width_scale = (
+            None if trail_width_scale is None else max(0.0, float(trail_width_scale))
+        )
+        self.style = str(style)
 
     @property
     def position(self) -> Point:
@@ -245,9 +275,12 @@ class ProjectileEffect(PrototypeEffect):
             return
         position = self.position
         alpha = int(255 * (1.0 - self.progress) * self.alpha_scale)
-        if self.trail:
+        if self.trail and self.style not in ("heavy_shuriken", "secret_route"):
             trail_start = _lerp(self.source, position, max(0.0, self.progress - self.trail_length))
-            trail_width = self.size * (0.25 if self.shape == "shuriken" else 0.38)
+            default_width = 0.25 if self.shape == "shuriken" else 0.38
+            trail_width = self.size * (
+                default_width if self.trail_width_scale is None else self.trail_width_scale
+            )
             _draw_bloom_line(painter, trail_start, position, trail_width, self.color, int(alpha * 0.75))
 
         dx = self.target[0] - self.source[0]
@@ -255,15 +288,26 @@ class ProjectileEffect(PrototypeEffect):
         length = max(1.0, math.hypot(dx, dy))
         nx, ny = dx / length, dy / length
         px, py = -ny, nx
+        if self.wind_streaks and self.style not in ("heavy_shuriken", "secret_route"):
+            _draw_angular_wind_streaks(
+                painter, position, nx, ny, px, py,
+                self.size, self.color, alpha, self.wind_streaks,
+            )
         tip = (position[0] + nx * self.size * 0.85, position[1] + ny * self.size * 0.85)
         left = (position[0] - nx * self.size * 0.7 + px * self.size * 0.62,
                 position[1] - ny * self.size * 0.7 + py * self.size * 0.62)
         right = (position[0] - nx * self.size * 0.7 - px * self.size * 0.62,
                  position[1] - ny * self.size * 0.7 - py * self.size * 0.62)
         if self.shape == "shuriken":
+            if self.style == "heavy_shuriken":
+                self._draw_heavy_shuriken(painter, position, alpha, nx, ny, px, py)
+                return
+            if self.style == "secret_route":
+                self._draw_secret_route(painter, position, alpha, nx, ny, px, py)
+                return
             _draw_shuriken(
                 painter, position[0], position[1],
-                self.progress * 980.0 + self.seed,
+                self.progress * self.spin_rate + self.seed,
                 self.size * 0.72,
                 _color(self.color, alpha),
                 core_white=True,
@@ -290,6 +334,177 @@ class ProjectileEffect(PrototypeEffect):
         painter.setBrush(QBrush(QColor(255, 255, 255, alpha)))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(QPointF(*position), self.size * 0.30, self.size * 0.30)
+        painter.restore()
+
+    def _draw_heavy_shuriken(self, painter, position, alpha, nx, ny, px, py):
+        """Draw the single heavy Fuma silhouette without a circular wave."""
+        progress = self.progress
+        charge = min(1.0, progress / 0.18)
+        gather = max(0.0, 1.0 - progress / 0.18)
+        body_size = self.size * (0.72 + 0.28 * charge)
+
+        trail_start = _lerp(self.source, position, max(0.0, progress - self.trail_length))
+        _draw_bloom_line(
+            painter,
+            trail_start,
+            position,
+            self.size * 0.22,
+            self.color,
+            int(alpha * 0.42),
+        )
+        _draw_bloom_line(
+            painter,
+            _lerp(trail_start, position, 0.20),
+            position,
+            self.size * 0.075,
+            (238, 220, 255),
+            int(alpha * 0.58),
+        )
+        if progress > 0.16:
+            _draw_angular_wind_streaks(
+                painter, position, nx, ny, px, py,
+                self.size, self.color, alpha, min(1, self.wind_streaks),
+            )
+
+        if gather > 0.0:
+            painter.save()
+            painter.setPen(QPen(QColor(184, 143, 250, int(alpha * 0.52 * gather)), max(1.0, self.size * 0.032)))
+            for angle in (28.0, 118.0, 208.0, 298.0):
+                radians = math.radians(angle)
+                outer = self.size * (1.05 + 0.30 * gather)
+                inner = self.size * (0.42 + 0.15 * gather)
+                painter.drawLine(
+                    QPointF(position[0] + math.cos(radians) * outer, position[1] + math.sin(radians) * outer),
+                    QPointF(position[0] + math.cos(radians) * inner, position[1] + math.sin(radians) * inner),
+                )
+            painter.restore()
+
+        spin_angle = progress * self.spin_rate + self.seed
+        painter.save()
+        painter.translate(position[0], position[1])
+        painter.rotate(spin_angle)
+        s = body_size
+        heavy_path = QPainterPath()
+        heavy_path.moveTo(0, -s * 1.22)
+        heavy_path.lineTo(s * 0.26, -s * 0.38)
+        heavy_path.lineTo(s * 0.76, -s * 0.18)
+        heavy_path.lineTo(s * 1.18, 0)
+        heavy_path.lineTo(s * 0.76, s * 0.18)
+        heavy_path.lineTo(s * 0.26, s * 0.38)
+        heavy_path.lineTo(0, s * 1.22)
+        heavy_path.lineTo(-s * 0.26, s * 0.38)
+        heavy_path.lineTo(-s * 0.76, s * 0.18)
+        heavy_path.lineTo(-s * 1.18, 0)
+        heavy_path.lineTo(-s * 0.76, -s * 0.18)
+        heavy_path.lineTo(-s * 0.26, -s * 0.38)
+        heavy_path.closeSubpath()
+
+        gradient = QLinearGradient(-s, -s, s, s)
+        gradient.setColorAt(0.0, QColor(247, 228, 255, alpha))
+        gradient.setColorAt(0.28, _color(self.color, int(alpha * 0.94)))
+        gradient.setColorAt(0.72, _color((105, 65, 168), int(alpha * 0.96)))
+        gradient.setColorAt(1.0, QColor(24, 12, 46, int(alpha * 0.92)))
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(QPen(QColor(244, 224, 255, alpha), max(1.5, self.size * 0.055)))
+        painter.drawPath(heavy_path)
+
+        core = QPainterPath()
+        core.moveTo(0, -s * 0.25)
+        core.lineTo(s * 0.25, 0)
+        core.lineTo(0, s * 0.25)
+        core.lineTo(-s * 0.25, 0)
+        core.closeSubpath()
+        painter.setBrush(QBrush(QColor(17, 8, 35, int(alpha * 0.92))))
+        painter.setPen(QPen(QColor(255, 246, 218, int(alpha * 0.92)), max(1.0, self.size * 0.032)))
+        painter.drawPath(core)
+
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(255, 238, 192, int(alpha * 0.74)), max(1.0, self.size * 0.026)))
+        for blade_offset in (0.0, 90.0, 180.0, 270.0):
+            radians = math.radians(blade_offset)
+            painter.drawLine(
+                QPointF(math.cos(radians) * s * 0.17, math.sin(radians) * s * 0.17),
+                QPointF(math.cos(radians) * s * 0.94, math.sin(radians) * s * 0.94),
+            )
+        painter.restore()
+
+        impact_phase = min(1.0, max(0.0, (progress - 0.72) / 0.28))
+        if impact_phase > 0.0:
+            painter.save()
+            painter.setPen(QPen(QColor(242, 226, 255, int(alpha * 0.65 * impact_phase)), max(1.0, self.size * 0.035)))
+            for side in (-1.0, 1.0):
+                painter.drawLine(
+                    QPointF(position[0] + px * self.size * 0.16, position[1] + py * self.size * 0.16),
+                    QPointF(position[0] + nx * self.size * 0.60 + side * px * self.size * 0.48,
+                            position[1] + ny * self.size * 0.60 + side * py * self.size * 0.48),
+                )
+            painter.restore()
+
+    def _draw_secret_route(self, painter, position, alpha, nx, ny, px, py):
+        """Draw a thin, offset ninjutsu route instead of a standard shuriken."""
+        progress = self.progress
+        activation = min(1.0, progress / 0.18)
+        direction_angle = math.degrees(math.atan2(ny, nx))
+        trail_start = _lerp(self.source, position, max(0.0, progress - self.trail_length))
+
+        for offset, alpha_scale in ((-0.16, 0.52), (0.18, 0.34)):
+            start = (
+                trail_start[0] + px * self.size * offset,
+                trail_start[1] + py * self.size * offset,
+            )
+            end = (
+                position[0] + px * self.size * offset,
+                position[1] + py * self.size * offset,
+            )
+            _draw_bloom_line(
+                painter,
+                start,
+                end,
+                self.size * 0.085,
+                self.color,
+                int(alpha * alpha_scale),
+            )
+
+        if progress < 0.22:
+            painter.save()
+            painter.setPen(QPen(QColor(191, 151, 240, int(alpha * 0.44 * (1.0 - progress / 0.22))), max(1.0, self.size * 0.030)))
+            for angle in (-42.0, 38.0, 132.0):
+                radians = math.radians(angle)
+                outer = self.size * (0.78 + 0.34 * (1.0 - activation))
+                inner = self.size * (0.18 + 0.18 * activation)
+                painter.drawLine(
+                    QPointF(position[0] + math.cos(radians) * outer, position[1] + math.sin(radians) * outer),
+                    QPointF(position[0] + math.cos(radians) * inner, position[1] + math.sin(radians) * inner),
+                )
+            painter.restore()
+
+        ghost_position = _lerp(self.source, position, max(0.0, progress - 0.13))
+        painter.save()
+        painter.translate(ghost_position[0], ghost_position[1])
+        painter.rotate(direction_angle + progress * self.spin_rate * 0.05 - 12.0)
+        ghost_length = self.size * 0.82
+        painter.setPen(QPen(QColor(153, 117, 218, int(alpha * 0.26)), max(1.0, self.size * 0.030)))
+        painter.drawLine(QPointF(-ghost_length * 0.62, 0), QPointF(ghost_length * 0.62, 0))
+        painter.restore()
+
+        painter.save()
+        painter.translate(position[0], position[1])
+        painter.rotate(direction_angle + progress * self.spin_rate * 0.10 - 8.0)
+        length = self.size * (1.05 + 0.28 * activation)
+        width = self.size * 0.18
+        blade = QPainterPath()
+        blade.moveTo(length, 0)
+        blade.lineTo(length * 0.28, -width)
+        blade.lineTo(-length * 0.70, -width * 0.42)
+        blade.lineTo(-length * 0.92, 0)
+        blade.lineTo(-length * 0.70, width * 0.42)
+        blade.lineTo(length * 0.28, width)
+        blade.closeSubpath()
+        painter.setBrush(QBrush(QColor(80, 48, 136, int(alpha * 0.78))))
+        painter.setPen(QPen(QColor(239, 219, 255, int(alpha * 0.86)), max(1.0, self.size * 0.035)))
+        painter.drawPath(blade)
+        painter.setPen(QPen(QColor(255, 244, 205, int(alpha * 0.78)), max(1.0, self.size * 0.025)))
+        painter.drawLine(QPointF(-length * 0.62, 0), QPointF(length * 0.76, 0))
         painter.restore()
 
     def _draw_cannonball(self, painter, position, alpha):
@@ -370,7 +585,7 @@ class SpreadProjectileEffect(PrototypeEffect):
     def __init__(self, source, target, projectile_count=5, spread_angle=68.0,
                  fan_radius=34.0, speed=520.0, size=11.0, lifetime=None,
                  trail=True, trail_length=0.14, color=(176, 132, 255), seed=707,
-                 delay=0.0, shape="shuriken", alpha_scale=1.0):
+                 delay=0.0, shape="shuriken", alpha_scale=1.0, style="default"):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(
@@ -395,6 +610,7 @@ class SpreadProjectileEffect(PrototypeEffect):
         self.trail_length = max(0.02, float(trail_length))
         self.shape = str(shape)
         self.alpha_scale = max(0.0, float(alpha_scale))
+        self.style = str(style or "default").strip().lower()
         self._base_angle = math.atan2(
             target_point[1] - source_point[1],
             target_point[0] - source_point[0],
@@ -431,6 +647,10 @@ class SpreadProjectileEffect(PrototypeEffect):
         if alpha <= 0:
             return
 
+        if self.style == "fan_burst":
+            self._draw_fan_burst(painter)
+            return
+
         for index, endpoint in enumerate(self.projectile_targets):
             position = _lerp(self.source, endpoint, progress)
             if self.trail:
@@ -464,18 +684,58 @@ class SpreadProjectileEffect(PrototypeEffect):
                 painter.drawEllipse(QPointF(*position), self.size * 0.55, self.size * 0.55)
                 painter.restore()
 
-        if progress > 0.68:
-            _draw_expanding_shockwave(
-                painter,
-                self.target[0],
-                self.target[1],
-                max(self.fan_radius, self.size * 3.0),
-                (progress - 0.68) / 0.32,
-                self.color,
-                int(alpha * 0.78),
-                aspect=0.48,
-                rings=1,
-            )
+    def _draw_fan_burst(self, painter) -> None:
+        """Draw a compact simultaneous fan, without turning it into a ring."""
+        progress = self.progress
+        alpha = int(255 * (1.0 - progress) * self.alpha_scale)
+        if alpha <= 0:
+            return
+
+        if progress < 0.24:
+            gather = min(1.0, progress / 0.24)
+            center = _lerp(self.source, self.target, gather * 0.12)
+            painter.save()
+            painter.setPen(QPen(_color(self.color, int(alpha * 0.50)), max(1.0, self.size * 0.12)))
+            for index in range(5):
+                angle = self._base_angle + math.radians(-38.0 + index * 19.0)
+                inner = self.size * (0.18 + gather * 0.16)
+                outer = self.size * (0.78 - gather * 0.20)
+                painter.drawLine(
+                    QPointF(center[0] - math.cos(angle) * inner, center[1] - math.sin(angle) * inner),
+                    QPointF(center[0] - math.cos(angle) * outer, center[1] - math.sin(angle) * outer),
+                )
+            painter.restore()
+
+        for index, endpoint in enumerate(self.projectile_targets):
+            position = _lerp(self.source, endpoint, progress)
+            trail_progress = max(0.0, progress - self.trail_length)
+            trail_start = _lerp(self.source, endpoint, trail_progress)
+            if self.trail:
+                _draw_bloom_line(
+                    painter,
+                    trail_start,
+                    position,
+                    self.size * 0.10,
+                    self.color,
+                    int(alpha * 0.54),
+                )
+            angle = math.degrees(self._base_angle + self._fan_angles[index])
+            angle += progress * 720.0 + index * 11.0
+            if self.shape == "shuriken":
+                _draw_shuriken(
+                    painter,
+                    position[0],
+                    position[1],
+                    angle,
+                    self.size * 0.52,
+                    _color(self.color, int(alpha * 0.94)),
+                    core_white=False,
+                )
+            else:
+                painter.save()
+                painter.setPen(QPen(_color(self.color, int(alpha * 0.90)), 1.0))
+                painter.drawPoint(QPointF(*position))
+                painter.restore()
 
 
 class MarkDetonationEffect(PrototypeEffect):
@@ -484,18 +744,21 @@ class MarkDetonationEffect(PrototypeEffect):
     primitive = "mark_detonation"
     layer = "impact"
 
-    def __init__(self, position, size=38.0, mark_lifetime=0.72,
+    def __init__(self, position, source=None, size=38.0, mark_lifetime=0.72,
                  detonation_delay=0.34, detonation_lifetime=0.42,
-                 detonation=True, color=(191, 128, 255), seed=808, delay=0.0):
+                 detonation=True, color=(191, 128, 255), seed=808, delay=0.0,
+                 style="contract"):
         self.position = _point(position)
+        self.source = _point(source if source is not None else position)
         self.size = max(1.0, float(size))
         self.mark_lifetime = max(0.05, float(mark_lifetime))
         self.detonation_delay = max(0.0, float(detonation_delay)) if detonation else 0.0
         self.detonation_lifetime = max(0.05, float(detonation_lifetime)) if detonation else 0.0
         self.detonation = bool(detonation)
+        self.style = str(style or "contract").strip().lower()
         total_lifetime = self.mark_lifetime + self.detonation_delay + self.detonation_lifetime
         super().__init__(
-            self.position,
+            self.source,
             self.position,
             lifetime=total_lifetime,
             color=color,
@@ -527,6 +790,9 @@ class MarkDetonationEffect(PrototypeEffect):
             min(1.0, (elapsed - detonation_start) / self.detonation_lifetime),
         )
         fade = 1.0 - detonation_progress
+        if self.style == "talisman":
+            self._draw_talisman_detonation(painter, detonation_progress)
+            return
         x, y = self.position
         if detonation_progress < 0.22:
             flash_alpha = int(220 * (1.0 - detonation_progress / 0.22))
@@ -558,27 +824,269 @@ class MarkDetonationEffect(PrototypeEffect):
         painter.restore()
 
     def _draw_mark(self, painter, fade) -> None:
+        if self.style == "talisman":
+            self._draw_talismans(painter, fade)
+            return
+        self._draw_contract_mark(painter, fade)
+
+    def _draw_contract_mark(self, painter, fade) -> None:
         x, y = self.position
-        pulse = 0.92 + 0.08 * math.sin(self.progress * math.pi * 5.0)
-        radius = self.size * pulse
-        alpha = int(220 * max(0.0, min(1.0, fade)))
+        progress = min(1.0, max(0.0, self.progress))
+        clamp = lambda value: min(1.0, max(0.0, value))
+        outer_generation = clamp(progress / 0.18)
+        inner_generation = clamp((progress - 0.08) / 0.14)
+        frame_presence = clamp((0.34 - progress) / 0.12)
+        core_generation = clamp((progress - 0.10) / 0.13)
+        lock_in = clamp((progress - 0.14) / 0.12)
+        peak_flash = max(0.0, 1.0 - abs(progress - 0.22) / 0.065)
+        residual = clamp((progress - 0.34) / 0.12)
+        late_fade = clamp((progress - 0.38) / 0.40)
+        pulse = 0.985 + 0.015 * math.sin(progress * math.pi * 4.0)
+        scale = (0.90 + 0.10 * outer_generation) * pulse
+        width = self.size * 0.84 * scale
+        height = self.size * 0.61 * scale
+        alpha = int(244 * max(0.0, min(1.0, fade)))
+
+        def draw_progressive_segments(points, ratio):
+            ratio = clamp(ratio)
+            segment_count = len(points)
+            for index in range(segment_count):
+                segment_progress = ratio * segment_count - index
+                if segment_progress <= 0.0:
+                    break
+                start = points[index]
+                end = points[(index + 1) % segment_count]
+                portion = min(1.0, segment_progress)
+                partial_end = QPointF(
+                    start.x() + (end.x() - start.x()) * portion,
+                    start.y() + (end.y() - start.y()) * portion,
+                )
+                painter.drawLine(start, partial_end)
+
         painter.save()
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(_color(self.color, int(alpha * 0.86)), max(1.4, self.size * 0.055)))
-        painter.drawEllipse(QPointF(x, y), radius, radius * 0.58)
-        painter.setPen(QPen(QColor(255, 244, 210, int(alpha * 0.92)), max(1.0, self.size * 0.035)))
-        painter.drawLine(QPointF(x - radius * 0.72, y), QPointF(x + radius * 0.72, y))
-        painter.drawLine(QPointF(x, y - radius * 0.43), QPointF(x, y + radius * 0.43))
-        painter.drawLine(
-            QPointF(x - radius * 0.47, y - radius * 0.28),
-            QPointF(x + radius * 0.47, y + radius * 0.28),
+        outer_points = (
+            QPointF(x, y - height),
+            QPointF(x + width * 0.72, y - height * 0.34),
+            QPointF(x + width, y),
+            QPointF(x + width * 0.72, y + height * 0.34),
+            QPointF(x, y + height),
+            QPointF(x - width * 0.72, y + height * 0.34),
+            QPointF(x - width, y),
+            QPointF(x - width * 0.72, y - height * 0.34),
         )
-        painter.drawLine(
-            QPointF(x - radius * 0.47, y + radius * 0.28),
-            QPointF(x + radius * 0.47, y - radius * 0.28),
+        painter.setPen(QPen(_color(self.color, int(alpha * 0.92 * frame_presence)), max(1.7, self.size * 0.060)))
+        draw_progressive_segments(outer_points, outer_generation * frame_presence)
+
+        inner_width = width * 0.54
+        inner_height = height * 0.54
+        inner_points = (
+            QPointF(x, y - inner_height),
+            QPointF(x + inner_width * 0.72, y - inner_height * 0.34),
+            QPointF(x + inner_width, y),
+            QPointF(x + inner_width * 0.72, y + inner_height * 0.34),
+            QPointF(x, y + inner_height),
+            QPointF(x - inner_width * 0.72, y + inner_height * 0.34),
+            QPointF(x - inner_width, y),
+            QPointF(x - inner_width * 0.72, y - inner_height * 0.34),
         )
-        painter.setPen(QPen(QColor(232, 190, 255, int(alpha * 0.72)), max(1.0, self.size * 0.025)))
-        painter.drawEllipse(QPointF(x, y), radius * 0.28, radius * 0.28)
+        painter.setPen(QPen(QColor(255, 244, 210, int(alpha * 0.98 * frame_presence)), max(1.1, self.size * 0.036)))
+        draw_progressive_segments(inner_points, inner_generation * frame_presence)
+
+        painter.setPen(QPen(QColor(232, 190, 255, int(alpha * (0.45 + 0.55 * lock_in) * frame_presence)), max(1.0, self.size * 0.026)))
+        for angle in (45.0, 135.0, 225.0, 315.0):
+            radians = math.radians(angle)
+            outer_radius = self.size * (1.24 - 0.14 * outer_generation)
+            inner_radius = self.size * (0.68 + 0.10 * lock_in)
+            painter.drawLine(
+                QPointF(x + math.cos(radians) * outer_radius, y + math.sin(radians) * outer_radius),
+                QPointF(x + math.cos(radians) * inner_radius, y + math.sin(radians) * inner_radius),
+            )
+
+        rune_starts = (0.12, 0.15, 0.13, 0.10)
+        rune_scales = (0.82, 1.00, 0.68, 0.90)
+        for index, angle in enumerate((0.0, 90.0, 180.0, 270.0)):
+            rune_progress = clamp((progress - rune_starts[index]) / 0.10) * frame_presence
+            if rune_progress <= 0.0:
+                continue
+            radians = math.radians(angle)
+            rune_radius = self.size * (0.90 + 0.08 * rune_scales[index])
+            rune_x = x + math.cos(radians) * rune_radius
+            rune_y = y + math.sin(radians) * rune_radius
+            painter.save()
+            painter.translate(rune_x, rune_y)
+            painter.rotate(angle + (index - 1.5) * 2.0)
+            rune_width = self.size * 0.16 * rune_scales[index]
+            rune_height = self.size * 0.13 * rune_scales[index]
+            rune_alpha = int(alpha * rune_progress * (0.64 + 0.30 * (index % 2)))
+            painter.setPen(QPen(QColor(191, 151, 240, rune_alpha), max(1.1, self.size * 0.029)))
+            draw_progressive_segments(
+                (
+                    QPointF(-rune_width, -rune_height),
+                    QPointF(rune_width * 0.25, -rune_height),
+                    QPointF(rune_width * 0.45, -rune_height * 0.7),
+                    QPointF(rune_width * 0.45, rune_height * 0.7),
+                    QPointF(rune_width * 0.25, rune_height),
+                    QPointF(-rune_width, rune_height),
+                    QPointF(-rune_width, -rune_height),
+                ),
+                rune_progress,
+            )
+            painter.restore()
+
+        if core_generation > 0.0 or residual > 0.0:
+            core_strength = max(core_generation, residual * 0.64)
+            core_scale = (0.22 + 0.07 * core_generation) * (1.0 - residual * 0.18)
+            core_radius = self.size * core_scale
+            core = QPainterPath()
+            core_offsets = (1.00, 0.92, 1.08, 0.95, 1.04, 0.88)
+            for index in range(6):
+                angle = math.radians(index * 60.0 - 30.0)
+                point = QPointF(
+                    x + math.cos(angle) * core_radius * core_offsets[index],
+                    y + math.sin(angle) * core_radius * core_offsets[index],
+                )
+                if index == 0:
+                    core.moveTo(point)
+                else:
+                    core.lineTo(point)
+            core.closeSubpath()
+            core_alpha = int(alpha * core_strength * (0.62 + 0.38 * (1.0 - late_fade)))
+            painter.setBrush(QBrush(QColor(18, 8, 33, int(core_alpha * 0.92))))
+            painter.setPen(QPen(QColor(255, 239, 192, core_alpha), max(1.0, self.size * 0.032)))
+            painter.drawPath(core)
+            painter.setPen(QPen(QColor(110, 70, 157, int(core_alpha * 0.82)), max(1.0, self.size * 0.020)))
+            painter.drawLine(QPointF(x - core_radius * 0.42, y + core_radius * 0.16), QPointF(x + core_radius * 0.28, y - core_radius * 0.30))
+            painter.drawLine(QPointF(x - core_radius * 0.16, y + core_radius * 0.38), QPointF(x + core_radius * 0.38, y + core_radius * 0.08))
+
+        if residual > 0.0:
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor(126, 92, 170, int(alpha * 0.28 * residual)), max(1.0, self.size * 0.018)))
+            painter.drawLine(QPointF(x - self.size * 0.36, y + self.size * 0.30), QPointF(x - self.size * 0.20, y + self.size * 0.14))
+            painter.drawLine(QPointF(x + self.size * 0.25, y - self.size * 0.31), QPointF(x + self.size * 0.40, y - self.size * 0.18))
+
+        if peak_flash > 0.0:
+            flash = QPainterPath()
+            for index in range(8):
+                angle = math.radians(index * 45.0 - 22.5)
+                radius = self.size * (0.42 if index % 2 == 0 else 0.19)
+                point = QPointF(x + math.cos(angle) * radius, y + math.sin(angle) * radius)
+                if index == 0:
+                    flash.moveTo(point)
+                else:
+                    flash.lineTo(point)
+            flash.closeSubpath()
+            painter.setBrush(QBrush(QColor(238, 218, 255, int(190 * peak_flash))))
+            painter.setPen(Qt.NoPen)
+            painter.drawPath(flash)
+        painter.restore()
+
+    def _draw_talismans(self, painter, fade) -> None:
+        x, y = self.position
+        elapsed = self.duration * self.progress
+        arrival = min(1.0, max(0.0, elapsed / self.mark_lifetime))
+        alpha = int(235 * max(0.0, min(1.0, fade)) * (0.55 + arrival * 0.45))
+        paper_layout = (
+            (-0.46, -0.12, -16.0, 0.82),
+            (0.0, 0.0, 4.0, 1.0),
+            (0.46, 0.12, 18.0, 0.82),
+        )
+        for offset_x, offset_y, angle, scale in paper_layout:
+            launch_offset = (offset_x * self.size * 0.10, offset_y * self.size * 0.10)
+            destination = (
+                x + offset_x * self.size * 1.35,
+                y + offset_y * self.size,
+            )
+            launch = (
+                self.source[0] + launch_offset[0],
+                self.source[1] + launch_offset[1],
+            )
+            paper_position = _lerp(launch, destination, arrival)
+            drift_x = (1.0 - arrival) * self.size * (-0.42 if offset_x < 0 else 0.42)
+            drift_y = (1.0 - arrival) * self.size * (-0.18 if offset_y <= 0 else 0.18)
+            if arrival < 0.96:
+                _draw_bloom_line(
+                    painter,
+                    launch,
+                    paper_position,
+                    self.size * 0.055,
+                    self.color,
+                    int(alpha * 0.30),
+                )
+            painter.save()
+            painter.translate(paper_position[0] + drift_x, paper_position[1] + drift_y)
+            painter.rotate(angle + (1.0 - arrival) * (8.0 if angle < 0 else -8.0))
+            width = self.size * 0.34 * scale
+            height = self.size * 0.72 * scale
+            paper = QPainterPath()
+            paper.moveTo(-width * 0.5, -height * 0.5)
+            paper.lineTo(width * 0.24, -height * 0.5)
+            paper.lineTo(width * 0.5, -height * 0.24)
+            paper.lineTo(width * 0.5, height * 0.5)
+            paper.lineTo(-width * 0.5, height * 0.5)
+            paper.closeSubpath()
+            painter.setBrush(QBrush(QColor(248, 225, 174, int(alpha * 0.82))))
+            painter.setPen(QPen(QColor(255, 245, 205, alpha), max(1.0, self.size * 0.025)))
+            painter.drawPath(paper)
+            painter.setPen(QPen(QColor(122, 70, 176, int(alpha * 0.9)), max(1.0, self.size * 0.022)))
+            painter.drawLine(QPointF(-width * 0.23, -height * 0.25), QPointF(width * 0.22, -height * 0.25))
+            painter.drawLine(QPointF(-width * 0.23, 0), QPointF(width * 0.22, 0))
+            painter.drawLine(QPointF(-width * 0.14, height * 0.25), QPointF(width * 0.14, height * 0.25))
+            painter.restore()
+
+        if self.detonation and self.progress > 0.22:
+            prep_alpha = int(190 * max(0.0, min(1.0, (self.progress - 0.22) / 0.16)))
+            painter.save()
+            painter.setPen(QPen(QColor(255, 250, 220, prep_alpha), max(1.0, self.size * 0.035)))
+            painter.drawLine(QPointF(x - self.size * 0.26, y), QPointF(x + self.size * 0.26, y))
+            painter.drawLine(QPointF(x, y - self.size * 0.34), QPointF(x, y + self.size * 0.34))
+            painter.restore()
+
+    def _draw_talisman_detonation(self, painter, detonation_progress) -> None:
+        x, y = self.position
+        fade = 1.0 - detonation_progress
+        painter.save()
+        flash = QPainterPath()
+        flash.moveTo(x, y - self.size * 0.72)
+        flash.lineTo(x + self.size * 0.12, y - self.size * 0.15)
+        flash.lineTo(x + self.size * 0.70, y)
+        flash.lineTo(x + self.size * 0.13, y + self.size * 0.14)
+        flash.lineTo(x, y + self.size * 0.72)
+        flash.lineTo(x - self.size * 0.13, y + self.size * 0.14)
+        flash.lineTo(x - self.size * 0.70, y)
+        flash.lineTo(x - self.size * 0.12, y - self.size * 0.15)
+        flash.closeSubpath()
+        painter.setBrush(QBrush(QColor(255, 249, 221, int(220 * fade))))
+        painter.setPen(Qt.NoPen)
+        painter.drawPath(flash)
+
+        rnd = random.Random(self.seed)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(244, 226, 255, int(230 * fade)), max(1.0, self.size * 0.045)))
+        for index in range(8):
+            angle = index * math.pi / 4.0 + rnd.uniform(-0.13, 0.13)
+            inner = self.size * (0.16 + detonation_progress * 0.12)
+            outer = self.size * (0.48 + detonation_progress * 0.62)
+            painter.drawLine(
+                QPointF(x + math.cos(angle) * inner, y + math.sin(angle) * inner),
+                QPointF(x + math.cos(angle) * outer, y + math.sin(angle) * outer),
+            )
+        for index in range(3):
+            angle = index * math.pi * 0.82 + 0.3
+            distance = self.size * (0.48 + detonation_progress * 0.34)
+            painter.save()
+            painter.translate(x + math.cos(angle) * distance, y + math.sin(angle) * distance)
+            painter.rotate(math.degrees(angle) + 28.0)
+            shard = QPainterPath()
+            shard.moveTo(-self.size * 0.10, -self.size * 0.04)
+            shard.lineTo(self.size * 0.13, -self.size * 0.06)
+            shard.lineTo(self.size * 0.05, self.size * 0.07)
+            shard.lineTo(-self.size * 0.14, self.size * 0.05)
+            shard.closeSubpath()
+            painter.setBrush(QBrush(QColor(248, 225, 174, int(185 * fade))))
+            painter.setPen(QPen(QColor(255, 245, 205, int(220 * fade)), max(1.0, self.size * 0.02)))
+            painter.drawPath(shard)
+            painter.restore()
         painter.restore()
 
 
@@ -696,13 +1204,16 @@ class ImpactEffect(PrototypeEffect):
     layer = "impact"
 
     def __init__(self, position, size=26.0, lifetime=0.30, flash=True,
-                 ring=True, burst=True, color=(255, 220, 130), seed=505, delay=0.0):
+                 ring=True, burst=True, color=(255, 220, 130), seed=505, delay=0.0,
+                 style="default", shard_count=6):
         super().__init__(position, position, lifetime=lifetime, color=color, seed=seed, delay=delay)
         self.position = _point(position)
         self.size = max(1.0, float(size))
         self.flash = bool(flash)
         self.ring = bool(ring)
         self.burst = bool(burst)
+        self.style = str(style)
+        self.shard_count = max(1, int(shard_count))
 
     def draw(self, painter) -> None:
         if not self.has_started:
@@ -732,7 +1243,79 @@ class ImpactEffect(PrototypeEffect):
                     QPointF(x + math.cos(angle) * inner, y + math.sin(angle) * inner * 0.7),
                     QPointF(x + math.cos(angle) * outer, y + math.sin(angle) * outer * 0.7),
                 )
+        if self.style == "angular_shard":
+            self._draw_angular_shards(painter, x, y, fade)
+        elif self.style == "cross_cut":
+            self._draw_cross_cut(painter, x, y, fade)
+        elif self.style == "fan_cut":
+            self._draw_fan_cut(painter, x, y, fade)
+        elif self.style == "ground_crack":
+            self._draw_ground_cracks(painter, x, y, fade)
         painter.restore()
+
+    def _draw_angular_shards(self, painter, x, y, fade):
+        rnd = random.Random(self.seed + 31)
+        painter.setPen(QPen(_color(self.color, int(230 * fade)), max(1.0, self.size * 0.045)))
+        for index in range(self.shard_count):
+            angle = index * math.pi / 3.0 + rnd.uniform(-0.08, 0.08)
+            inner = self.size * (0.32 + self.progress * 0.14)
+            outer = self.size * (0.70 + self.progress * 0.58)
+            painter.drawLine(
+                QPointF(x + math.cos(angle) * inner, y + math.sin(angle) * inner),
+                QPointF(x + math.cos(angle) * outer, y + math.sin(angle) * outer),
+            )
+
+    def _draw_cross_cut(self, painter, x, y, fade):
+        span = self.size * (0.42 + self.progress * 0.46)
+        painter.setPen(QPen(QColor(248, 232, 255, int(235 * fade)), max(1.1, self.size * 0.045)))
+        for angle in (-28.0, 28.0):
+            radians = math.radians(angle)
+            painter.drawLine(
+                QPointF(x - math.cos(radians) * span, y - math.sin(radians) * span),
+                QPointF(x + math.cos(radians) * span, y + math.sin(radians) * span),
+            )
+        ghost_span = span * 0.72
+        painter.setPen(QPen(QColor(135, 94, 195, int(135 * fade)), max(1.0, self.size * 0.025)))
+        painter.drawLine(
+            QPointF(x - ghost_span * 0.92, y - self.size * 0.16),
+            QPointF(x + ghost_span * 0.92, y - self.size * 0.16),
+        )
+        painter.drawLine(
+            QPointF(x - self.size * 0.16, y - ghost_span * 0.92),
+            QPointF(x + self.size * 0.16, y + ghost_span * 0.92),
+        )
+
+    def _draw_fan_cut(self, painter, x, y, fade):
+        """Draw several small cut marks as a fan, not an expanding blast."""
+        painter.setPen(QPen(_color(self.color, int(225 * fade)), max(1.0, self.size * 0.040)))
+        for index in range(5):
+            offset = (index - 2) * self.size * 0.19
+            angle = math.radians(-24.0 + index * 12.0)
+            center_x = x + offset
+            center_y = y + abs(index - 2) * self.size * 0.045
+            span = self.size * (0.22 + self.progress * 0.16)
+            direction_x = math.cos(angle)
+            direction_y = math.sin(angle)
+            painter.drawLine(
+                QPointF(center_x - direction_x * span, center_y - direction_y * span),
+                QPointF(center_x + direction_x * span, center_y + direction_y * span),
+            )
+
+    def _draw_ground_cracks(self, painter, x, y, fade):
+        rnd = random.Random(self.seed + 53)
+        base_y = y + self.size * 0.20
+        painter.setPen(QPen(_color(self.color, int(235 * fade)), max(1.2, self.size * 0.050)))
+        for branch in (-1, 0, 1):
+            direction = -1.0 if branch < 0 else 1.0
+            if branch == 0:
+                direction = 1.0
+            path = QPainterPath(QPointF(x + branch * self.size * 0.10, base_y))
+            for step in range(1, 4):
+                path.lineTo(QPointF(
+                    x + branch * self.size * 0.10 + direction * step * self.size * (0.28 + rnd.random() * 0.10),
+                    base_y + (rnd.random() - 0.5) * self.size * 0.18 + step * self.size * 0.035,
+                ))
+            painter.drawPath(path)
 
 
 class PersistentEffect(PrototypeEffect):
@@ -853,35 +1436,40 @@ PRESETS = {
     ),
     "night_lord_four_flying": VFXPreset(
         "night_lord_four_flying", "projectile",
-        {"speed": 880.0, "size": 9.0, "lifetime": 0.46, "trail": True,
-         "trail_length": 0.08, "shape": "shuriken", "color": (205, 168, 255), "seed": 2201},
+        {"speed": 1080.0, "size": 8.0, "lifetime": 0.28, "trail": True,
+         "trail_length": 0.055, "shape": "shuriken", "spin_rate": 720.0,
+         "color": (205, 168, 255), "seed": 2201},
     ),
     "night_lord_taunt_contract": VFXPreset(
         "night_lord_taunt_contract", "mark",
         {"size": 42.0, "mark_lifetime": 1.15, "detonation": False,
-         "color": (219, 128, 255), "seed": 2202},
+         "color": (219, 128, 255), "seed": 2202, "style": "contract"},
     ),
     "night_lord_fuma_shuriken": VFXPreset(
         "night_lord_fuma_shuriken", "projectile",
-        {"speed": 430.0, "size": 29.0, "lifetime": 0.88, "trail": True,
-         "trail_length": 0.22, "shape": "shuriken", "color": (191, 143, 255), "seed": 2203},
+        {"speed": 420.0, "size": 46.0, "lifetime": 0.44, "trail": True,
+         "trail_length": 0.34, "shape": "shuriken", "style": "heavy_shuriken",
+         "spin_rate": 1800.0, "wind_streaks": 1, "trail_width_scale": 0.26,
+         "color": (191, 143, 255), "seed": 2203},
     ),
     "night_lord_dakrus_secret": VFXPreset(
         "night_lord_dakrus_secret", "projectile",
-        {"speed": 660.0, "size": 18.0, "lifetime": 0.60, "trail": True,
-         "trail_length": 0.16, "shape": "shuriken", "color": (124, 91, 190), "seed": 2204},
+        {"speed": 600.0, "size": 20.0, "lifetime": 0.46, "trail": True,
+         "trail_length": 0.20, "shape": "shuriken", "style": "secret_route",
+         "spin_rate": 1080.0, "color": (124, 91, 190), "seed": 2204},
     ),
     "night_lord_spread_throw": VFXPreset(
         "night_lord_spread_throw", "spread",
-        {"projectile_count": 5, "spread_angle": 78.0, "fan_radius": 42.0,
-         "speed": 520.0, "size": 12.0, "lifetime": 0.72, "trail": True,
-         "trail_length": 0.16, "shape": "shuriken", "color": (182, 136, 255), "seed": 2205},
+        {"projectile_count": 5, "spread_angle": 88.0, "fan_radius": 70.0,
+         "speed": 560.0, "size": 10.0, "lifetime": 0.46, "trail": True,
+         "trail_length": 0.09, "shape": "shuriken", "style": "fan_burst",
+         "color": (182, 136, 255), "seed": 2205},
     ),
     "night_lord_detonation_talisman": VFXPreset(
         "night_lord_detonation_talisman", "mark",
-        {"size": 46.0, "mark_lifetime": 0.36, "detonation_delay": 0.42,
-         "detonation_lifetime": 0.48, "detonation": True,
-         "color": (244, 146, 255), "seed": 2206},
+        {"size": 46.0, "mark_lifetime": 0.20, "detonation_delay": 0.14,
+         "detonation_lifetime": 0.30, "detonation": True,
+         "color": (244, 146, 255), "seed": 2206, "style": "talisman"},
     ),
     "cannonball_heavy": VFXPreset(
         "cannonball_heavy", "projectile",
@@ -919,7 +1507,7 @@ def create_effect(preset: str | VFXPreset, source, target=None, **overrides) -> 
         return SpreadProjectileEffect(source, target, **params)
     if definition.effect_type == "mark":
         position = target if target is not None else source
-        return MarkDetonationEffect(position, **params)
+        return MarkDetonationEffect(position, source=source, **params)
     if definition.effect_type == "area":
         # Area presets target a battlefield region; an explicit center wins,
         # otherwise use the target point when one is supplied.

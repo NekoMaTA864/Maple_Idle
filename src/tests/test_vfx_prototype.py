@@ -170,23 +170,45 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         )
         self.assertIsInstance(mark, MarkDetonationEffect)
         self.assertFalse(mark.detonation)
+        self.assertEqual(mark.style, "contract")
 
         talisman = create_effect(
             "night_lord_detonation_talisman",
             (320, 480),
             (80, 170),
         )
-        talisman.update(0.60)
+        self.assertEqual(talisman.style, "talisman")
+        self.assertEqual(talisman.source, (320.0, 480.0))
+        talisman.update(0.18)
         self.assertFalse(talisman.detonation_started)
-        talisman.update(0.25)
+        talisman.update(0.20)
         self.assertTrue(talisman.detonation_started)
         talisman.update(talisman.duration + 0.01)
         self.assertFalse(talisman.is_alive)
+
+    def test_night_lord_mark_styles_draw_distinct_presentation_phases(self):
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        contract = create_effect("night_lord_taunt_contract", (220, 180), (400, 500))
+        talisman = create_effect("night_lord_detonation_talisman", (580, 180), (400, 500))
+        painter = QPainter(image)
+        try:
+            for progress in (0.08, 0.42, 0.86):
+                contract.set_progress(progress)
+                contract.draw(painter)
+                talisman.set_progress(progress)
+                talisman.draw(painter)
+        finally:
+            painter.end()
+        self.assertFalse(painter.isActive())
 
     def test_night_lord_compositions_do_not_consume_global_rng(self):
         image = QImage(800, 600, QImage.Format_ARGB32)
         image.fill(0)
         effects = [
+            create_effect("night_lord_four_flying", (400, 500), (220, 140)),
+            create_effect("night_lord_fuma_shuriken", (400, 500), (220, 140)),
+            create_effect("night_lord_dakrus_secret", (400, 500), (220, 140)),
             create_effect("night_lord_spread_throw", (400, 500), (220, 140)),
             create_effect("night_lord_detonation_talisman", (400, 500), (220, 140)),
         ]
@@ -200,6 +222,122 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         finally:
             painter.end()
         self.assertEqual(before, random.getstate())
+
+    def test_night_lord_projectile_visual_roles_are_distinct(self):
+        rapid = create_effect("night_lord_four_flying", (400, 500), (220, 140))
+        fuma = create_effect("night_lord_fuma_shuriken", (400, 500), (220, 140))
+        dakrus = create_effect("night_lord_dakrus_secret", (400, 500), (220, 140))
+        spread = create_effect("night_lord_spread_throw", (400, 500), (220, 140))
+
+        self.assertLess(rapid.duration, fuma.duration)
+        self.assertEqual(rapid.wind_streaks, 0)
+        self.assertEqual(fuma.wind_streaks, 1)
+        self.assertEqual(fuma.style, "heavy_shuriken")
+        self.assertGreater(fuma.size, rapid.size)
+        self.assertGreater(fuma.spin_rate, rapid.spin_rate)
+        self.assertEqual(dakrus.style, "secret_route")
+        self.assertLess(dakrus.size, fuma.size)
+        self.assertGreater(dakrus.trail_length, rapid.trail_length)
+        self.assertEqual(spread.style, "fan_burst")
+        self.assertEqual(spread.projectile_count, 5)
+        self.assertLess(spread.size, fuma.size)
+        self.assertLess(spread.trail_length, dakrus.trail_length)
+
+    def test_night_lord_spread_impact_is_fan_cut_without_ring(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        window.play_preset("night_lord_spread_throw")
+        effect = window.state.vfx_mgr.effects[0]
+        window.state.update_presentation(effect.duration + 0.01)
+        impacts = [
+            item for item in window.state.vfx_mgr.effects
+            if isinstance(item, ImpactEffect)
+        ]
+        self.assertEqual(len(impacts), 1)
+        self.assertFalse(impacts[0].ring)
+        self.assertFalse(impacts[0].burst)
+        self.assertFalse(impacts[0].flash)
+        self.assertEqual(impacts[0].style, "fan_cut")
+        self.assertEqual(impacts[0].shard_count, 5)
+        window.close()
+
+    def test_night_lord_fuma_impact_is_cutting_without_ring(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        window.play_preset("night_lord_fuma_shuriken")
+        effect = window.state.vfx_mgr.effects[0]
+        window.state.update_presentation(effect.duration + 0.01)
+        impacts = [
+            item for item in window.state.vfx_mgr.effects
+            if isinstance(item, ImpactEffect)
+        ]
+        self.assertEqual(len(impacts), 1)
+        self.assertFalse(impacts[0].ring)
+        self.assertFalse(impacts[0].burst)
+        self.assertEqual(impacts[0].style, "angular_shard")
+        self.assertEqual(impacts[0].shard_count, 7)
+        window.close()
+
+    def test_night_lord_dakrus_impact_is_cross_cut_without_ring(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        window.play_preset("night_lord_dakrus_secret")
+        effect = window.state.vfx_mgr.effects[0]
+        window.state.update_presentation(effect.duration + 0.11)
+        impacts = [
+            item for item in window.state.vfx_mgr.effects
+            if isinstance(item, ImpactEffect)
+        ]
+        self.assertEqual(len(impacts), 1)
+        self.assertFalse(impacts[0].ring)
+        self.assertFalse(impacts[0].burst)
+        self.assertFalse(impacts[0].flash)
+        self.assertEqual(impacts[0].style, "cross_cut")
+        window.close()
+
+    def test_night_lord_projectile_primitives_draw_to_a_qimage(self):
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        effects = [
+            create_effect("night_lord_four_flying", (400, 500), (220, 140)),
+            create_effect("night_lord_fuma_shuriken", (400, 500), (220, 140)),
+            create_effect("night_lord_dakrus_secret", (400, 500), (220, 140)),
+        ]
+        painter = QPainter(image)
+        try:
+            for effect in effects:
+                effect.set_progress(0.55)
+                effect.draw(painter)
+        finally:
+            painter.end()
+        self.assertFalse(painter.isActive())
+
+    def test_night_lord_projectile_compositions_clean_up_after_presentation(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        for preset in (
+            "night_lord_four_flying",
+            "night_lord_fuma_shuriken",
+            "night_lord_dakrus_secret",
+        ):
+            window.play_preset(preset)
+            longest = max(
+                (effect.duration + effect.delay for effect in window.state.vfx_mgr.effects),
+                default=0.0,
+            )
+            window.state.update_presentation(longest + 0.01)
+            window.state.update_presentation(0.50)
+            self.assertEqual(window.state.vfx_mgr.effects, [])
+            self.assertEqual(window.state.pending_impacts, [])
+        window.close()
 
     def test_area_effect_is_localized_and_expires(self):
         effect = AreaEffect((400, 160), width=180, height=64, lifetime=0.6)
@@ -355,6 +493,7 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         self.assertEqual(labels["hero_fighting_instinct"], "鬥氣本能")
         self.assertEqual(labels["hero_sacred_sword_descent"], "聖劍降臨")
 
+        # Night Lord's canonical class registry exposes all six WIP skills.
         self.assertEqual(labels["night_lord_four_flying"], "四飛閃")
         self.assertEqual(labels["night_lord_taunt_contract"], "挑釁契約")
         self.assertEqual(labels["night_lord_fuma_shuriken"], "風魔手裏劍")
@@ -390,11 +529,11 @@ class TestVerticalVFXPrototype(unittest.TestCase):
 
         window = VFXGalleryWindow()
         expected_counts = {
-            "night_lord_four_flying": 2,
+            "night_lord_four_flying": 4,
             "night_lord_taunt_contract": 1,
-            "night_lord_fuma_shuriken": 2,
-            "night_lord_dakrus_secret": 4,
-            "night_lord_spread_throw": 2,
+            "night_lord_fuma_shuriken": 1,
+            "night_lord_dakrus_secret": 3,
+            "night_lord_spread_throw": 1,
             "night_lord_detonation_talisman": 1,
         }
         for preset, expected_count in expected_counts.items():
@@ -404,6 +543,13 @@ class TestVerticalVFXPrototype(unittest.TestCase):
                 self.assertFalse(any(hasattr(effect, name) for name in (
                     "damage", "cooldown", "hit_count", "buff", "resource", "progression"
                 )))
+        window.play_preset("night_lord_dakrus_secret")
+        self.assertEqual(len(window.state.pending_impacts), 1)
+        dakrus_effects = list(window.state.vfx_mgr.effects)
+        self.assertEqual(len(dakrus_effects), 3)
+        self.assertNotEqual(dakrus_effects[1].target, dakrus_effects[2].target)
+        self.assertNotEqual(dakrus_effects[1].target, dakrus_effects[0].target)
+        self.assertNotEqual(dakrus_effects[1].source, dakrus_effects[2].source)
         window.close()
 
 

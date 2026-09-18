@@ -11,6 +11,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -109,13 +110,14 @@ class GalleryCombatState:
         self.floating_popups.clear()
         self.pending_impacts.clear()
 
-    def queue_impact(self, effect, size, color, lifetime=0.30):
+    def queue_impact(self, effect, size, color, lifetime=0.30, **presentation):
         """Schedule a visual impact when a prototype effect reaches its target."""
         self.pending_impacts.append({
             "effect": effect,
             "size": float(size),
             "color": tuple(color),
             "lifetime": float(lifetime),
+            "presentation": dict(presentation),
         })
 
     def update_presentation(self, dt):
@@ -130,6 +132,7 @@ class GalleryCombatState:
                     lifetime=sequence["lifetime"],
                     color=sequence["color"],
                     seed=getattr(effect, "seed", 505) + 700,
+                    **sequence["presentation"],
                 ))
             else:
                 remaining.append(sequence)
@@ -140,7 +143,95 @@ class GalleryCombatState:
         self.floating_popups = [popup for popup in self.floating_popups if popup["life"] > 0]
 
 
+GALLERY_CLASS_REGISTRY = (
+    {
+        "class_id": "hero",
+        "class_label": "英雄",
+        "avatar_id": "hero",
+        "skills": (
+            {"slot": 1, "skill_id": "hero_rage_attack", "skill_label": "狂暴攻擊", "preset": "hero_rage_attack", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "hit"},
+            {"slot": 2, "skill_id": "hero_sword_illusion", "skill_label": "劍之幻象", "preset": "hero_sword_illusion", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "hit"},
+            {"slot": 3, "skill_id": "hero_burning_soul_sword", "skill_label": "燃燒靈魂之劍", "preset": "hero_burning_soul_sword", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+            {"slot": 4, "skill_id": "hero_spatial_slash", "skill_label": "空間斬", "preset": "hero_spatial_slash", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "hit"},
+            {"slot": 5, "skill_id": "hero_fighting_instinct", "skill_label": "鬥氣本能", "preset": "hero_fighting_instinct", "trigger": "play_preset", "source_anchor": "center", "target_anchor": "hit"},
+            {"slot": 6, "skill_id": "hero_sacred_sword_descent", "skill_label": "聖劍降臨", "preset": "hero_sacred_sword_descent", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "hit"},
+        ),
+    },
+    {
+        "class_id": "night_lord",
+        "class_label": "夜使者",
+        "avatar_id": "night_lord",
+        "skills": (
+            {"slot": 1, "skill_id": "night_lord_shuriken", "skill_label": "手裏劍投擲", "preset": "night_lord_shuriken", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+        ),
+    },
+    {
+        "class_id": "cannon",
+        "class_label": "重砲指揮官",
+        "avatar_id": "cannon",
+        "skills": (
+            {"slot": 1, "skill_id": "cannonball_heavy", "skill_label": "重型加農砲彈", "preset": "cannonball_heavy", "trigger": "play_preset", "source_anchor": "muzzle", "target_anchor": "hit"},
+        ),
+    },
+    {
+        "class_id": "bishop",
+        "class_label": "主教",
+        "avatar_id": "bishop",
+        "skills": (
+            {"slot": 1, "skill_id": "bishop_holy_area", "skill_label": "主教神聖領域", "preset": "bishop_holy_area", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "ground"},
+        ),
+    },
+    {
+        "class_id": "prototype",
+        "class_label": "Prototype",
+        "avatar_id": "hero",
+        "skills": (
+            {"slot": 1, "skill_id": "hero_slash", "skill_label": "舊版英雄斬擊", "preset": "hero_slash", "trigger": "play_preset", "source_anchor": "tip", "target_anchor": "hit"},
+        ),
+    },
+)
+
+
+NIGHT_LORD_SKILLS = (
+    {"slot": 1, "skill_id": "night_lord_four_flying", "skill_label": "四飛閃", "preset": "night_lord_four_flying", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+    {"slot": 2, "skill_id": "night_lord_taunt_contract", "skill_label": "挑釁契約", "preset": "night_lord_taunt_contract", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+    {"slot": 3, "skill_id": "night_lord_fuma_shuriken", "skill_label": "風魔手裏劍", "preset": "night_lord_fuma_shuriken", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+    {"slot": 4, "skill_id": "night_lord_dakrus_secret", "skill_label": "達克魯的秘傳", "preset": "night_lord_dakrus_secret", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+    {"slot": 5, "skill_id": "night_lord_spread_throw", "skill_label": "散式投擲", "preset": "night_lord_spread_throw", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+    {"slot": 6, "skill_id": "night_lord_detonation_talisman", "skill_label": "飛閃起爆符", "preset": "night_lord_detonation_talisman", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+)
+
+
+def _class_skills(class_definition):
+    if class_definition["class_id"] == "night_lord":
+        return NIGHT_LORD_SKILLS
+    return class_definition["skills"]
+
+
+def _flatten_gallery_registry():
+    skills = []
+    bindings = {}
+    class_ids = {}
+    labels = {}
+    for class_definition in GALLERY_CLASS_REGISTRY:
+        for skill in _class_skills(class_definition):
+            preset = skill["preset"]
+            skills.append((skill["skill_label"], preset))
+            bindings[preset] = (
+                class_definition["avatar_id"],
+                skill["source_anchor"],
+                skill["target_anchor"],
+            )
+            class_ids[preset] = class_definition["class_id"]
+            labels[preset] = skill["skill_label"]
+    return tuple(skills), bindings, class_ids, labels
+
+
+GALLERY_PRESET_ORDER, GALLERY_PRESET_BINDINGS, GALLERY_PRESET_CLASS_IDS, GALLERY_PRESET_LABELS = _flatten_gallery_registry()
+
+
 class VFXGalleryWindow(QMainWindow):
+    # Legacy flat maps retained for compatibility; the canonical registry below overrides them.
     PRESET_ORDER = (
         ("狂暴攻擊", "hero_rage_attack"),
         ("劍之幻象", "hero_sword_illusion"),
@@ -177,6 +268,13 @@ class VFXGalleryWindow(QMainWindow):
         "cannonball_heavy": ("cannon", "muzzle", "hit"),
         "bishop_holy_area": ("bishop", "tip", "ground"),
     }
+    # Canonical class-driven Gallery maps.
+    CLASS_REGISTRY = GALLERY_CLASS_REGISTRY
+    PRESET_ORDER = GALLERY_PRESET_ORDER
+    PRESET_BINDINGS = GALLERY_PRESET_BINDINGS
+    PRESET_CLASS_IDS = GALLERY_PRESET_CLASS_IDS
+    PRESET_LABELS = GALLERY_PRESET_LABELS
+
 
     def __init__(self):
         super().__init__()
@@ -191,7 +289,12 @@ class VFXGalleryWindow(QMainWindow):
         )
         self.state = GalleryCombatState()
         self.arena = CombatArenaWidget(self.state, self)
+        self.current_class_id = "hero"
         self.current_preset = None
+        self.current_variant = "normal"
+        self.class_buttons = {}
+        self.skill_buttons = []
+        self.variant_buttons = {}
         self._last_tick = time.monotonic()
         self._build_ui()
 
@@ -214,12 +317,40 @@ class VFXGalleryWindow(QMainWindow):
         layout.addWidget(heading)
         layout.addWidget(self.arena, 1)
 
-        button_grid = QGridLayout()
-        for index, (label, preset) in enumerate(self.PRESET_ORDER):
+        class_bar = QHBoxLayout()
+        for class_definition in self.CLASS_REGISTRY:
+            class_id = class_definition["class_id"]
+            button = QPushButton(class_definition["class_label"])
+            button.setCheckable(True)
+            button.clicked.connect(lambda _checked=False, selected=class_id: self.select_class(selected))
+            self.class_buttons[class_id] = button
+            class_bar.addWidget(button)
+        layout.addLayout(class_bar)
+
+        self.skill_grid = QGridLayout()
+        layout.addLayout(self.skill_grid)
+        self._render_skill_buttons()
+
+        self.variant_row = QHBoxLayout()
+        self.variant_label = QLabel("空間斬變體")
+        self.variant_label.setStyleSheet("color: #c4b5fd; font-size: 11px;")
+        self.variant_row.addWidget(self.variant_label)
+        for variant, label in (
+            ("normal", "Normal"),
+            ("empowered", "Empowered"),
+            ("maximum", "Maximum"),
+        ):
             button = QPushButton(label)
-            button.clicked.connect(lambda _checked=False, name=preset: self.play_preset(name))
-            button_grid.addWidget(button, index // 3, index % 3)
-        layout.addLayout(button_grid)
+            button.setCheckable(True)
+            button.clicked.connect(
+                lambda _checked=False, selected=variant: self.play_preset(
+                    "hero_spatial_slash", variant=selected
+                )
+            )
+            self.variant_row.addWidget(button)
+            self.variant_buttons[variant] = button
+        layout.addLayout(self.variant_row)
+        self._set_spatial_variant_controls(False)
 
         replay = QPushButton("重播")
         replay.clicked.connect(self.replay)
@@ -228,31 +359,91 @@ class VFXGalleryWindow(QMainWindow):
         self.status_label = QLabel("僅限 Gallery：不使用存檔、成長資料或 CombatManager")
         self.status_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         layout.addWidget(self.status_label)
+        self.class_buttons["hero"].setChecked(True)
+
+    def _class_definition(self, class_id):
+        for class_definition in self.CLASS_REGISTRY:
+            if class_definition["class_id"] == class_id:
+                return class_definition
+        raise KeyError(f"Unknown Gallery class: {class_id}")
+
+    def _skill_definition(self, preset_name):
+        for class_definition in self.CLASS_REGISTRY:
+            for skill in _class_skills(class_definition):
+                if skill["preset"] == preset_name:
+                    return class_definition, skill
+        raise KeyError(f"Unknown Gallery preset: {preset_name}")
+
+    def _render_skill_buttons(self):
+        while self.skill_grid.count():
+            item = self.skill_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.skill_buttons = []
+        class_definition = self._class_definition(self.current_class_id)
+        for index, skill in enumerate(_class_skills(class_definition)):
+            button = QPushButton(skill["skill_label"])
+            button.clicked.connect(
+                lambda _checked=False, preset=skill["preset"]: self.play_preset(preset)
+            )
+            self.skill_grid.addWidget(button, index // 3, index % 3)
+            self.skill_buttons.append(button)
+
+    def _set_spatial_variant_controls(self, visible, selected="normal"):
+        self.variant_label.setVisible(visible)
+        for variant, button in self.variant_buttons.items():
+            button.setVisible(visible)
+            button.setChecked(visible and variant == selected)
+
+    def select_class(self, class_id):
+        class_definition = self._class_definition(class_id)
+        self.current_class_id = class_id
+        self.current_preset = None
+        self.current_variant = "normal"
+        self.state.clear_presentation()
+        self.arena.set_combat_avatar(class_definition["avatar_id"])
+        self._set_spatial_variant_controls(False)
+        for button_id, button in self.class_buttons.items():
+            button.setChecked(button_id == class_id)
+        self._render_skill_buttons()
+        if hasattr(self, "status_label"):
+            self.status_label.setText(
+                f"目前職業：{class_definition['class_label']}｜僅限視覺展示，不建立 CombatManager"
+            )
 
     def _scene_points(self):
         scene = ArenaLayout(self.arena.width(), self.arena.height())
         return scene.player_position(), scene.enemy_anchor("hit", index=1, total=3)
 
-    def play_preset(self, preset_name):
+    def play_preset(self, preset_name, variant=None):
+        class_definition, skill = self._skill_definition(preset_name)
+        if self.current_class_id != class_definition["class_id"]:
+            self.select_class(class_definition["class_id"])
         definition = resolve_preset(preset_name)
         self.current_preset = preset_name
+        selected_variant = str(variant or "normal")
+        self.current_variant = selected_variant if preset_name == "hero_spatial_slash" else "normal"
+        self._set_spatial_variant_controls(
+            preset_name == "hero_spatial_slash",
+            self.current_variant,
+        )
         self.state.clear_presentation()
-        avatar_id, source_anchor, target_anchor = self.PRESET_BINDINGS[preset_name]
-        self.arena.set_combat_avatar(avatar_id)
+        self.arena.set_combat_avatar(class_definition["avatar_id"])
         self.arena.trigger_avatar_attack()
-        source = self.arena.avatar_anchor(source_anchor)
-        target = self.arena.enemy_anchor(target_anchor, index=1, total=3)
+        source = self.arena.avatar_anchor(skill["source_anchor"])
+        target = self.arena.enemy_anchor(skill["target_anchor"], index=1, total=3)
 
         effects = []
         if preset_name == "hero_sword_illusion":
-            # The delayed copies are separate presentation effects.  Their
-            # timing proves the phantom read without a combo counter or hit
-            # count in the gallery.
+            # The delayed copies are thin residual blade marks, not three more
+            # copies of the primary curved sword arc.
             main = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(main)
-            for index, (delay, size, alpha_scale) in enumerate(
-                ((0.13, 98.0, 0.48), (0.26, 92.0, 0.38)), start=1
+            for index, (delay, size, alpha_scale, angle) in enumerate(
+                ((0.15, 88.0, 0.36, -112.0), (0.28, 80.0, 0.25, -68.0)), start=1
             ):
+                offset = (-18.0, -6.0) if index == 1 else (18.0, -12.0)
                 effects.append(emit_vfx(
                     self.state.vfx_mgr,
                     definition,
@@ -261,14 +452,21 @@ class VFXGalleryWindow(QMainWindow):
                     delay=delay,
                     size=size,
                     alpha_scale=alpha_scale,
+                    style="phantom",
+                    angle=angle,
+                    offset=offset,
                     seed=int(definition.params["seed"]) + index,
                 ))
-            self._add_delayed_impact(target, 34, (130, 183, 255), 0.38, 700, 0.38)
+            self._add_delayed_impact(
+                target, 30, (130, 183, 255), 0.30, 700, 0.38,
+                ring=False, style="angular_shard",
+            )
         elif preset_name == "hero_burning_soul_sword":
             # Ignition, retained sword, and one optional-looking flame trail
             # are all presentation effects with independent lifecycles.
             ignition = ImpactEffect(
-                source, size=38, lifetime=0.46, color=(255, 142, 55), seed=2107
+                source, size=38, lifetime=0.46, color=(255, 142, 55), seed=2107,
+                ring=False,
             )
             self.state.vfx_mgr.add_effect(ignition)
             effects.append(ignition)
@@ -299,10 +497,14 @@ class VFXGalleryWindow(QMainWindow):
             )
             self.state.vfx_mgr.add_effect(followup)
             effects.append(followup)
-            self._add_delayed_impact(target, 20, (255, 145, 64), 0.16, 2108 + 700, 0.33)
+            self._add_delayed_impact(
+                target, 20, (255, 145, 64), 0.16, 2108 + 700, 0.33,
+                ring=False,
+            )
         elif preset_name == "hero_fighting_instinct":
             burst = ImpactEffect(
-                source, size=52, lifetime=0.42, color=(116, 228, 255), seed=2109
+                source, size=52, lifetime=0.42, color=(116, 228, 255), seed=2109,
+                ring=False, style="angular_shard",
             )
             self.state.vfx_mgr.add_effect(burst)
             effects.append(burst)
@@ -318,11 +520,33 @@ class VFXGalleryWindow(QMainWindow):
             descent_source = (target[0], target[1] - self.arena.height() * 0.15)
             descent = emit_vfx(self.state.vfx_mgr, definition, descent_source, target)
             effects.append(descent)
-            self._add_delayed_impact(target, 62, (167, 225, 255), 0.22, 2110, 0.40)
+            ground = self.arena.enemy_anchor("ground", index=1, total=3)
+            self._add_delayed_impact(
+                ground, 68, (167, 225, 255), 0.30, 2110, 0.40,
+                ring=False, style="ground_crack",
+            )
         elif preset_name == "hero_spatial_slash":
-            spatial = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            spatial_profiles = {
+                "normal": (0.52, 52, 0.30, 0.31, 5),
+                "empowered": (0.60, 62, 0.34, 0.26, 7),
+                "maximum": (0.68, 74, 0.40, 0.20, 10),
+            }
+            spatial_lifetime, impact_size, impact_lifetime, impact_delay, shard_count = spatial_profiles.get(
+                self.current_variant, spatial_profiles["normal"]
+            )
+            spatial = emit_vfx(
+                self.state.vfx_mgr,
+                definition,
+                source,
+                target,
+                variant=self.current_variant,
+                lifetime=spatial_lifetime,
+            )
             effects.append(spatial)
-            self._add_delayed_impact(target, 52, (105, 204, 255), 0.30, 2111, 0.31)
+            self._add_delayed_impact(
+                target, impact_size, (126, 94, 205), impact_lifetime, 2111,
+                impact_delay, ring=False, style="angular_shard", shard_count=shard_count,
+            )
         elif preset_name == "night_lord_shuriken":
             # Three presentation-only throws prove the rapid-fire read without
             # introducing hit-count or multi-hit gameplay semantics.
@@ -335,9 +559,21 @@ class VFXGalleryWindow(QMainWindow):
                 effects.append(effect)
                 self.state.queue_impact(effect, size=16, color=(214, 182, 255), lifetime=0.22)
         elif preset_name == "night_lord_four_flying":
-            effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
-            effects.append(effect)
-            self._add_delayed_impact(target, 24, (205, 168, 255), 0.22, 2201 + 700, 0.46)
+            # Four short, tightly spaced throws are one presentation sequence.
+            # They do not expose hit-count or any gameplay multi-hit state.
+            for index in range(4):
+                effect = emit_vfx(
+                    self.state.vfx_mgr,
+                    definition,
+                    source,
+                    target,
+                    delay=index * 0.055,
+                    seed=int(definition.params["seed"]) + index,
+                )
+                effects.append(effect)
+                self.state.queue_impact(
+                    effect, size=13, color=(205, 168, 255), lifetime=0.16
+                )
         elif preset_name == "night_lord_taunt_contract":
             # The mark is a pressure/debuff read only; it does not create a
             # debuff object or any gameplay state.
@@ -345,30 +581,72 @@ class VFXGalleryWindow(QMainWindow):
         elif preset_name == "night_lord_fuma_shuriken":
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
-            self._add_delayed_impact(target, 56, (218, 181, 255), 0.34, 2203 + 700, 0.82)
+            self.state.queue_impact(
+                effect,
+                size=64,
+                color=(218, 181, 255),
+                lifetime=0.36,
+                flash=False,
+                ring=False,
+                burst=False,
+                style="angular_shard",
+                shard_count=7,
+            )
         elif preset_name == "night_lord_dakrus_secret":
-            # Shadow copies are delayed presentation afterimages, not clones
-            # and not additional gameplay actors.
+            # The main throw starts at the attack anchor. Two thin shadow
+            # routes enter from offset sources and cross toward offset target
+            # points, making the skill read as secret path technique rather
+            # than delayed copies of one projectile.
             main = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(main)
-            for index, (delay, size, alpha_scale) in enumerate(
-                ((0.055, 15.0, 0.38), (0.11, 13.0, 0.24)), start=1
+            dx = target[0] - source[0]
+            dy = target[1] - source[1]
+            distance = max(1.0, (dx * dx + dy * dy) ** 0.5)
+            normal = (-dy / distance, dx / distance)
+            for index, (delay, offset, size, alpha_scale) in enumerate(
+                ((0.045, -26.0, 16.0, 0.40), (0.090, 26.0, 13.0, 0.26)), start=1
             ):
+                shadow_source = (
+                    source[0] + normal[0] * offset,
+                    source[1] + normal[1] * offset,
+                )
+                shadow_target = (
+                    target[0] - normal[0] * offset * 0.55,
+                    target[1] - normal[1] * offset * 0.55,
+                )
                 effects.append(emit_vfx(
                     self.state.vfx_mgr,
-                    definition,
-                    source,
-                    target,
+                    definition, shadow_source,
+                    shadow_target,
                     delay=delay,
                     size=size,
                     alpha_scale=alpha_scale,
                     seed=int(definition.params["seed"]) + index,
                 ))
-            self._add_delayed_impact(target, 38, (168, 128, 235), 0.28, 2204 + 700, 0.60)
+            self.state.queue_impact(
+                main,
+                size=50,
+                color=(168, 128, 235),
+                lifetime=0.30,
+                flash=False,
+                ring=False,
+                burst=False,
+                style="cross_cut",
+            )
         elif preset_name == "night_lord_spread_throw":
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
-            self._add_delayed_impact(target, 48, (200, 164, 255), 0.30, 2205 + 700, 0.72)
+            self.state.queue_impact(
+                effect,
+                size=48,
+                color=(200, 164, 255),
+                lifetime=0.30,
+                flash=False,
+                ring=False,
+                burst=False,
+                style="fan_cut",
+                shard_count=5,
+            )
         elif preset_name == "night_lord_detonation_talisman":
             # MarkDetonationEffect owns the mark -> delay -> detonation visual
             # timeline; the gallery does not create a gameplay debuff/timer.
@@ -377,19 +655,28 @@ class VFXGalleryWindow(QMainWindow):
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
             self.state.queue_impact(effect, size=50, color=(255, 155, 74), lifetime=0.38)
-        elif preset_name in ("hero_slash", "hero_rage_attack"):
+        elif preset_name == "hero_rage_attack":
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
-            self._add_delayed_impact(target, 30, (255, 225, 130), 0.26, 2112, 0.55)
+            self._add_delayed_impact(
+                target, 24, (255, 225, 130), 0.22, 2112, 0.38,
+                ring=False, burst=False, style="angular_shard", shard_count=3,
+            )
+        elif preset_name == "hero_slash":
+            effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(effect)
+            self._add_delayed_impact(
+                target, 30, (255, 225, 130), 0.26, 2112, 0.55,
+            )
         else:
             # Area presets resolve their visual center from the enemy ground
             # target; source remains the avatar cast anchor for the request.
             effects.append(emit_vfx(self.state.vfx_mgr, definition, source, target))
 
         effect = effects[-1]
-        slot_index = [name for _label, name in self.PRESET_ORDER].index(preset_name)
+        slot_index = (int(skill["slot"]) - 1) % len(self.arena.skill_slots)
         self.arena.set_skill_label(slot_index, f"S{slot_index + 1}")
-        display_name = dict((preset, label) for label, preset in self.PRESET_ORDER)[preset_name]
+        display_name = skill["skill_label"]
         primitive_names = {
             "slash": "斬擊",
             "projectile": "投射物",
@@ -404,7 +691,7 @@ class VFXGalleryWindow(QMainWindow):
             "僅限視覺展示"
         )
 
-    def _add_delayed_impact(self, target, size, color, lifetime, seed, delay=0.0):
+    def _add_delayed_impact(self, target, size, color, lifetime, seed, delay=0.0, **kwargs):
         """Add an impact with the formal effect lifecycle, not a skill timer."""
         self.state.vfx_mgr.add_effect(ImpactEffect(
             target,
@@ -413,11 +700,12 @@ class VFXGalleryWindow(QMainWindow):
             lifetime=lifetime,
             seed=seed,
             delay=delay,
+            **kwargs,
         ))
 
     def replay(self):
         if self.current_preset:
-            self.play_preset(self.current_preset)
+            self.play_preset(self.current_preset, variant=self.current_variant)
 
     def _tick(self):
         now = time.monotonic()
