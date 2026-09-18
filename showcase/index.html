@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#081321">
+    <title>MapleIdle Combat Prototype</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-header">
+        <div>
+          <p class="eyebrow">MAPLEIDLE / VISUAL SANDBOX</p>
+          <h1>MapleIdle Combat Prototype</h1>
+          <p class="lede">Hero loadout studies for a vertical combat presentation.</p>
+          <a class="review-link" href="./review/">開啟 Hero Build 視覺複核／設計頁 →</a>
+        </div>
+        <div class="header-mark" aria-hidden="true">
+          <span class="mark-core"></span>
+          <span class="mark-ring mark-ring-one"></span>
+          <span class="mark-ring mark-ring-two"></span>
+        </div>
+      </header>
+
+      <section class="showcase-intro" aria-labelledby="hero-heading">
+        <div>
+          <p class="section-kicker">COMBAT AVATAR / HERO</p>
+          <h2 id="hero-heading">Three ways to shape the same sword.</h2>
+        </div>
+        <p class="intro-copy">Presentation-only prototypes captured from the real PySide6 sandbox.</p>
+      </section>
+
+      <p id="load-state" class="load-state" role="status">Loading build data…</p>
+      <section id="build-grid" class="build-grid" aria-live="polite"></section>
+
+      <footer class="site-footer">
+        <span>STATIC SHOWCASE</span>
+        <span>NO COMBAT LOGIC / NO EXTERNAL ASSETS</span>
+      </footer>
+    </main>
+
+    <noscript>This showcase needs JavaScript enabled to load the Hero build data.</noscript>
+    <script>
+      const grid = document.querySelector("#build-grid");
+      const loadState = document.querySelector("#load-state");
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function buildCard(build, index) {
+        const titleId = `build-title-${index}`;
+        const preview = build.preview || {};
+        const previewVideo = build.previewVideo || preview.video || "";
+        const previewPoster = build.previewPoster || preview.poster || preview.path || "";
+        const previewLabel = preview.label || "Preview capture pending";
+        const skills = build.skills.map((skill) => `
+          <li class="skill-row">
+            <span class="skill-slot">${escapeHtml(skill.slot)}</span>
+            <span class="skill-name">${escapeHtml(skill.name)}</span>
+          </li>
+        `).join("");
+
+        const card = document.createElement("article");
+        card.className = "build-card";
+        card.style.setProperty("--accent", build.accent || "#75b8ff");
+        card.setAttribute("aria-labelledby", titleId);
+        card.innerHTML = `
+          <div class="card-heading">
+            <span class="build-index">0${index + 1}</span>
+            <div>
+              <p class="card-kicker">HERO BUILD</p>
+              <h3 id="${titleId}">${escapeHtml(build.name)}</h3>
+            </div>
+          </div>
+          <div class="preview-frame">
+            <div class="preview-grid" aria-hidden="true"></div>
+            ${previewVideo
+              ? `<video class="preview-video" autoplay muted loop playsinline preload="metadata"${previewPoster ? ` poster="${escapeHtml(previewPoster)}"` : ""} aria-label="${escapeHtml(build.name)} animated preview">
+                   <source src="${escapeHtml(previewVideo)}" type="video/webm">
+                 </video>`
+              : ""}
+            ${previewPoster
+              ? `<img class="preview-image preview-poster"${previewVideo ? " hidden" : ""} src="${escapeHtml(previewPoster)}" alt="${escapeHtml(build.name)} preview">`
+              : ""}
+            <div class="preview-placeholder preview-fallback"${previewVideo || previewPoster ? " hidden" : ""}>
+              <span class="preview-label">${escapeHtml(previewLabel)}</span>
+              <span class="preview-note">STATIC PREVIEW AREA</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <p class="build-summary">${escapeHtml(build.summary)}</p>
+            <ul class="skill-list" aria-label="${escapeHtml(build.name)} skills">${skills}</ul>
+          </div>
+        `;
+        const previewVideoElement = card.querySelector(".preview-video");
+        const previewPosterElement = card.querySelector(".preview-poster");
+        const fallback = card.querySelector(".preview-fallback");
+        if (previewVideoElement) {
+          previewVideoElement.addEventListener("error", () => {
+            previewVideoElement.hidden = true;
+            if (previewPosterElement) {
+              previewPosterElement.hidden = false;
+            } else if (fallback) {
+              fallback.hidden = false;
+            }
+          });
+        }
+        if (previewPosterElement && fallback) {
+          previewPosterElement.addEventListener("error", () => {
+            previewPosterElement.hidden = true;
+            fallback.hidden = false;
+          });
+        }
+        return card;
+      }
+
+      async function loadBuilds() {
+        try {
+          const response = await fetch("./data/hero.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (!Array.isArray(data.builds)) throw new Error("Invalid build data");
+          grid.replaceChildren(...data.builds.map(buildCard));
+          loadState.textContent = `${data.builds.length} Hero builds / presentation data loaded`;
+          loadState.classList.add("is-loaded");
+        } catch (error) {
+          loadState.textContent = "Build data could not be loaded.";
+          loadState.classList.add("is-error");
+          console.error("Showcase data load failed", error);
+        }
+      }
+
+      loadBuilds();
+    </script>
+  </body>
+</html>
