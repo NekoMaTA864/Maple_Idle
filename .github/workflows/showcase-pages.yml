@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feat/hero-vfx-review
+      - feat/night-lord-vfx-slice
     paths:
       - "showcase/**"
       - ".github/workflows/showcase-pages.yml"

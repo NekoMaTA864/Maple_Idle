@@ -1,5 +1,16 @@
-const DATA_URL = "../data/hero_review.json";
-const STORAGE_KEY = "mapleIdle.heroReview.v1";
+const DATA_URLS = {
+  hero: "../data/hero_review.json",
+  night_lord: "../data/night_lord_review.json"
+};
+const STORAGE_KEYS = {
+  hero: "mapleIdle.review.hero.v1",
+  night_lord: "mapleIdle.review.night_lord.v1"
+};
+const LEGACY_HERO_STORAGE_KEY = "mapleIdle.heroReview.v1";
+const CLASS_LABELS = {
+  hero: "英雄",
+  night_lord: "夜使者"
+};
 const COPY_FIELDS = ["summary", "visualGoal", "identity", "expectedRhythm"];
 const REVIEW_KEYS = ["overall", "identity", "burst", "sustain", "weight", "notes"];
 const MODES = ["single", "compare", "focus"];
@@ -15,6 +26,10 @@ const CHECKLIST_ITEMS = [
 ];
 
 const app = document.querySelector("#app");
+const classSelect = document.querySelector("#class-select");
+const classEyebrow = document.querySelector("#class-eyebrow");
+const pageTitle = document.querySelector(".header-inner h1");
+const pageLede = document.querySelector(".header-inner .lede");
 const modeSelect = document.querySelector("#mode-select");
 const singleBuildControl = document.querySelector("#single-build-control");
 const singleBuildSelect = document.querySelector("#single-build-select");
@@ -22,15 +37,21 @@ const focusBuildControls = document.querySelector("#focus-build-controls");
 const focusASelect = document.querySelector("#focus-a-select");
 const focusBSelect = document.querySelector("#focus-b-select");
 const buildGrid = document.querySelector("#build-grid");
+const observationPanel = document.querySelector("#comparison-observations");
+const observationTitle = document.querySelector("#comparison-title");
+const observationIntro = document.querySelector("#comparison-intro");
 const observationGrid = document.querySelector("#observation-grid");
+const buildsTitle = document.querySelector("#builds-title");
+const checklistPanel = document.querySelector(".checklist-panel");
 const checklist = document.querySelector("#checklist");
 const statusMessage = document.querySelector("#status-message");
 const viewSummary = document.querySelector("#view-summary");
 const importFile = document.querySelector("#import-file");
 
 const state = {
+  classId: "hero",
   data: null,
-  local: loadLocalState(),
+  local: loadLocalState("hero"),
   mode: "single",
   selectedId: "",
   focusIds: ["", ""]
@@ -40,33 +61,35 @@ function emptyLocalState() {
   return { version: 1, reviews: {}, checklist: {}, copyOverrides: {} };
 }
 
-function loadLocalState() {
+function loadLocalState(classId) {
+  const keys = [STORAGE_KEYS[classId]];
+  if (classId === "hero") keys.push(LEGACY_HERO_STORAGE_KEY);
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? normaliseLocalState(JSON.parse(raw)) : emptyLocalState();
+    for (const key of keys) {
+      const raw = window.localStorage.getItem(key);
+      if (raw) return normaliseLocalState(JSON.parse(raw));
+    }
   } catch (error) {
     return emptyLocalState();
   }
+  return emptyLocalState();
 }
 
 function normaliseLocalState(value) {
   const source = value && typeof value === "object" ? value : {};
   const result = emptyLocalState();
-  result.version = 1;
 
   if (source.reviews && typeof source.reviews === "object") {
-    for (const [buildId, review] of Object.entries(source.reviews)) {
+    for (const [entryId, review] of Object.entries(source.reviews)) {
       if (!review || typeof review !== "object") continue;
-      result.reviews[buildId] = {};
+      result.reviews[entryId] = {};
       for (const key of REVIEW_KEYS) {
         if (key === "notes") {
-          if (typeof review[key] === "string") result.reviews[buildId][key] = review[key].slice(0, 5000);
+          if (typeof review[key] === "string") result.reviews[entryId][key] = review[key].slice(0, 5000);
           continue;
         }
         const number = Number(review[key]);
-        if (Number.isInteger(number) && number >= 1 && number <= 5) {
-          result.reviews[buildId][key] = number;
-        }
+        if (Number.isInteger(number) && number >= 1 && number <= 5) result.reviews[entryId][key] = number;
       }
     }
   }
@@ -78,13 +101,13 @@ function normaliseLocalState(value) {
   }
 
   if (source.copyOverrides && typeof source.copyOverrides === "object") {
-    for (const [buildId, fields] of Object.entries(source.copyOverrides)) {
+    for (const [entryId, fields] of Object.entries(source.copyOverrides)) {
       if (!fields || typeof fields !== "object") continue;
       const allowed = {};
       for (const field of COPY_FIELDS) {
         if (typeof fields[field] === "string") allowed[field] = fields[field].slice(0, 5000);
       }
-      if (Object.keys(allowed).length) result.copyOverrides[buildId] = allowed;
+      if (Object.keys(allowed).length) result.copyOverrides[entryId] = allowed;
     }
   }
 
@@ -93,7 +116,7 @@ function normaliseLocalState(value) {
 
 function saveLocalState() {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.local));
+    window.localStorage.setItem(STORAGE_KEYS[state.classId], JSON.stringify(state.local));
     return true;
   } catch (error) {
     setStatus("瀏覽器無法寫入 localStorage，這次變更只會保留到頁面關閉。", true);
@@ -119,24 +142,34 @@ function setStatus(message, isWarning = false) {
   statusMessage.classList.toggle("status-warning", isWarning);
 }
 
-function builds() {
-  return state.data?.builds || [];
+function isNightLord() {
+  return state.classId === "night_lord";
 }
 
-function buildById(id) {
-  return builds().find((build) => build.id === id);
+function entries() {
+  return state.data?.builds || state.data?.skills || [];
 }
 
-function validBuildId(id) {
-  return Boolean(buildById(id));
+function entryById(id) {
+  return entries().find((entry) => entry.id === id);
 }
 
-function copyValue(build, field) {
-  return state.local.copyOverrides[build.id]?.[field] ?? build[field] ?? "";
+function validEntryId(id) {
+  return Boolean(entryById(id));
 }
 
-function reviewValue(buildId, key) {
-  return state.local.reviews[buildId]?.[key];
+function copyValue(entry, field) {
+  return state.local.copyOverrides[entry.id]?.[field] ?? entry[field] ?? "";
+}
+
+function reviewValue(entryId, key) {
+  return state.local.reviews[entryId]?.[key];
+}
+
+function assetUrl(value) {
+  const path = String(value || "");
+  if (!path || /^(?:https?:|data:|\/\/|\.|\/)/i.test(path)) return path;
+  return `../${path}`;
 }
 
 function readUrlState() {
@@ -144,42 +177,53 @@ function readUrlState() {
   const mode = params.get("mode");
   if (MODES.includes(mode)) state.mode = mode;
 
-  const first = builds()[0]?.id || "";
-  const second = builds()[1]?.id || first;
-  const requestedBuild = params.get("build");
+  const first = entries()[0]?.id || "";
+  const second = entries()[1]?.id || first;
+  const requestedEntry = params.get("build");
   const requestedA = params.get("a");
   const requestedB = params.get("b");
 
-  state.selectedId = validBuildId(requestedBuild) ? requestedBuild : first;
+  state.selectedId = validEntryId(requestedEntry) ? requestedEntry : first;
   state.focusIds = [
-    validBuildId(requestedA) ? requestedA : first,
-    validBuildId(requestedB) && requestedB !== state.focusIds[0] ? requestedB : second
+    validEntryId(requestedA) ? requestedA : first,
+    validEntryId(requestedB) && requestedB !== state.focusIds[0] ? requestedB : second
   ];
-  if (state.focusIds[0] === state.focusIds[1] && builds().length > 1) {
-    state.focusIds[1] = builds().find((build) => build.id !== state.focusIds[0])?.id || second;
-  }
+  ensureDistinctFocus(0);
+}
+
+function resetViewForData() {
+  const first = entries()[0]?.id || "";
+  const second = entries()[1]?.id || first;
+  state.mode = "single";
+  state.selectedId = first;
+  state.focusIds = [first, second];
 }
 
 function writeUrlState() {
   const params = new URLSearchParams();
+  params.set("class", state.classId);
   params.set("mode", state.mode);
   if (state.mode === "single") params.set("build", state.selectedId);
   if (state.mode === "focus") {
     params.set("a", state.focusIds[0]);
     params.set("b", state.focusIds[1]);
   }
-  const query = params.toString();
-  window.history.replaceState(null, "", `${window.location.pathname}?${query}`);
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
 }
 
 function optionMarkup(selectedId) {
-  return builds().map((build) => (
-    `<option value="${escapeAttribute(build.id)}" ${build.id === selectedId ? "selected" : ""}>${escapeHtml(build.name)}</option>`
+  return entries().map((entry) => (
+    `<option value="${escapeAttribute(entry.id)}" ${entry.id === selectedId ? "selected" : ""}>${escapeHtml(entry.name)}</option>`
   )).join("");
 }
 
 function renderControls() {
+  classSelect.value = state.classId;
+  modeSelect.innerHTML = isNightLord()
+    ? `<option value="single">單招檢視</option><option value="compare">六招並排</option><option value="focus">雙招聚焦</option>`
+    : `<option value="single">單一 Build 檢視</option><option value="compare">並排比較（三套）</option><option value="focus">焦點比較（兩套）</option>`;
   modeSelect.value = state.mode;
+  singleBuildControl.querySelector("span").textContent = isNightLord() ? "檢視技能" : "檢視 Build";
   singleBuildSelect.innerHTML = optionMarkup(state.selectedId);
   focusASelect.innerHTML = optionMarkup(state.focusIds[0]);
   focusBSelect.innerHTML = optionMarkup(state.focusIds[1]);
@@ -187,21 +231,38 @@ function renderControls() {
   focusBuildControls.hidden = state.mode !== "focus";
 }
 
-function renderObservations() {
-  observationGrid.innerHTML = builds().map((build, index) => `
-    <article class="observation-card">
-      <span class="observation-label">Build ${index + 1}</span>
-      <h3>${escapeHtml(build.name)}</h3>
-      <p><span class="observation-label">設計目標</span>${escapeHtml(copyValue(build, "visualGoal"))}</p>
-      <p><span class="observation-label">應有節奏</span>${escapeHtml(copyValue(build, "expectedRhythm"))}</p>
-    </article>
-  `).join("");
+function renderHeader() {
+  const label = CLASS_LABELS[state.classId];
+  classEyebrow.textContent = `MAPLEIDLE / ${isNightLord() ? "NIGHT LORD" : "HERO"} REVIEW`;
+  pageTitle.textContent = isNightLord() ? "夜使者技能視覺複核／設計頁" : "Hero Build 視覺複核／設計頁";
+  pageLede.textContent = isNightLord()
+    ? "用六招正式 presentation capture，檢查高速投擲、契約、旋轉、散射、殘影與起爆的差異。"
+    : "用現有 capture 的 PNG／WebM，逐一檢查三套流派的節奏、辨識度、持續感與視覺重量。";
+  document.title = `${label} VFX 視覺複核／設計頁`;
+  buildsTitle.textContent = isNightLord() ? "夜使者六招預覽" : "Hero Build 預覽";
 }
 
-function selectedBuilds() {
-  if (state.mode === "compare") return builds();
-  if (state.mode === "focus") return state.focusIds.map(buildById).filter(Boolean);
-  return [buildById(state.selectedId)].filter(Boolean);
+function renderObservations() {
+  const observations = state.data.observations || entries();
+  observationTitle.textContent = state.data.comparisonTitle || (isNightLord() ? "六招視覺語彙" : "比較觀察");
+  observationIntro.textContent = state.data.comparisonIntro || (isNightLord()
+    ? "先看六招的 silhouette、運動方式與節奏，再用本機 Review 欄位核對實際觀感。"
+    : "先確認三套 Build 的設計意圖，再用影片與 review 欄位核對實際觀感。");
+  observationGrid.innerHTML = observations.map((entry, index) => `
+    <article class="observation-card">
+      <span class="observation-label">${isNightLord() ? `技能 0${index + 1}` : `Build ${index + 1}`}</span>
+      <h3>${escapeHtml(entry.name)}</h3>
+      <p><span class="observation-label">設計目標</span>${escapeHtml(copyValue(entry, "visualGoal"))}</p>
+      <p><span class="observation-label">應有節奏</span>${escapeHtml(copyValue(entry, "expectedRhythm"))}</p>
+    </article>
+  `).join("");
+  observationPanel.hidden = observations.length === 0;
+}
+
+function selectedEntries() {
+  if (state.mode === "compare") return entries();
+  if (state.mode === "focus") return state.focusIds.map(entryById).filter(Boolean);
+  return [entryById(state.selectedId)].filter(Boolean);
 }
 
 function renderBullets(items) {
@@ -216,8 +277,8 @@ function selectOptions(selected, includeEmpty = false) {
   return empty + options;
 }
 
-function metricMarkup(buildId, key, label) {
-  const saved = reviewValue(buildId, key);
+function metricMarkup(entryId, key, label) {
+  const saved = reviewValue(entryId, key);
   const value = saved || 3;
   return `
     <label class="review-field">
@@ -230,43 +291,78 @@ function metricMarkup(buildId, key, label) {
   `;
 }
 
-function renderCard(build, index) {
-  const review = state.local.reviews[build.id] || {};
-  const poster = build.preview?.poster || "";
-  const posterAlt = build.preview?.alt || `${build.name} 預覽圖`;
+function renderMedia(entry) {
+  const poster = assetUrl(entry.preview?.poster || entry.poster || "");
+  const video = assetUrl(entry.video || "");
+  const posterAlt = entry.preview?.alt || `${entry.name} 預覽圖`;
+  if (!video && !poster) {
+    return `<div class="preview-placeholder"><span>STATIC PREVIEW AREA</span></div>`;
+  }
+  if (!video) {
+    return `<img class="poster-fallback poster-only" src="${escapeAttribute(poster)}" alt="${escapeAttribute(posterAlt)}">`;
+  }
+  return `
+    <video class="build-video" autoplay muted loop playsinline preload="metadata" poster="${escapeAttribute(poster)}">
+      <source src="${escapeAttribute(video)}" type="video/webm">
+      您的瀏覽器不支援 WebM 影片。
+    </video>
+    <img class="poster-fallback" src="${escapeAttribute(poster)}" alt="${escapeAttribute(posterAlt)}" hidden>
+    <div class="media-status" hidden>影片無法播放，現在顯示 PNG poster。</div>
+  `;
+}
+
+function renderSkillList(entry) {
+  const skills = entry.skills?.length ? entry.skills : [{
+    slot: "技能",
+    id: entry.id,
+    name: entry.name,
+    role: entry.identity,
+    visualNote: entry.visualGoal
+  }];
+  return skills.map((skill) => `
+    <li class="skill-item">
+      <span class="skill-slot">${escapeHtml(skill.slot)}</span>
+      <span>
+        <span class="skill-name">${escapeHtml(skill.name)}</span>
+        <span class="skill-role">${escapeHtml(skill.role)}</span>
+        <small class="skill-id">${escapeHtml(skill.id)}</small>
+      </span>
+      <span class="skill-note">${escapeHtml(skill.visualNote)}</span>
+    </li>
+  `).join("");
+}
+
+function renderCard(entry, index) {
+  const review = state.local.reviews[entry.id] || {};
   const fields = [
     ["summary", "摘要"],
     ["visualGoal", "視覺訴求"],
     ["identity", "辨識重點"],
     ["expectedRhythm", "預期節奏"]
   ];
+  const typeLabel = isNightLord() ? "Night Lord Skill" : "Hero Build";
 
   return `
-    <article class="build-card" data-build-id="${escapeAttribute(build.id)}">
+    <article class="build-card" data-build-id="${escapeAttribute(entry.id)}">
       <header class="build-card-header">
         <div>
-          <span class="section-kicker">Hero Build</span>
-          <h3>${escapeHtml(build.name)}</h3>
-          <p>${escapeHtml(build.preview?.label || "視覺預覽")}</p>
+          <span class="section-kicker">${typeLabel}</span>
+          <h3>${escapeHtml(entry.name)}</h3>
+          <p>${escapeHtml(entry.preview?.label || "視覺預覽")}</p>
         </div>
         <span class="build-index">0${index + 1}</span>
       </header>
 
       <div class="media-shell">
-        <video class="build-video" autoplay muted loop playsinline preload="metadata" poster="${escapeAttribute(poster)}">
-          <source src="${escapeAttribute(build.video || "")}" type="video/webm">
-          您的瀏覽器不支援 WebM 影片。
-        </video>
-        <img class="poster-fallback" src="${escapeAttribute(poster)}" alt="${escapeAttribute(posterAlt)}" hidden>
-        <div class="media-status" hidden>影片無法播放，現在顯示 PNG poster。</div>
+        ${renderMedia(entry)}
       </div>
 
       <div class="card-body">
-        <section class="copy-section" aria-label="${escapeAttribute(build.name)} 文案">
+        <section class="copy-section" aria-label="${escapeAttribute(entry.name)} 文案">
           ${fields.map(([field, label]) => `
             <p class="copy-block" data-copy-field="${field}">
               <strong>${label}</strong>
-              <span class="copy-text">${escapeHtml(copyValue(build, field))}</span>
+              <span class="copy-text">${escapeHtml(copyValue(entry, field))}</span>
             </p>
           `).join("")}
           <div class="copy-actions">
@@ -278,47 +374,35 @@ function renderCard(build, index) {
           </div>
         </section>
 
-        <section class="skill-section" aria-labelledby="skills-${escapeAttribute(build.id)}">
-          <h4 id="skills-${escapeAttribute(build.id)}" class="subheading">技能組</h4>
-          <ul class="skill-list">
-            ${(build.skills || []).map((skill) => `
-              <li class="skill-item">
-                <span class="skill-slot">${escapeHtml(skill.slot)}</span>
-                <span>
-                  <span class="skill-name">${escapeHtml(skill.name)}</span>
-                  <span class="skill-role">${escapeHtml(skill.role)}</span>
-                  <small class="skill-id">${escapeHtml(skill.id)}</small>
-                </span>
-                <span class="skill-note">${escapeHtml(skill.visualNote)}</span>
-              </li>
-            `).join("")}
-          </ul>
+        <section class="skill-section" aria-labelledby="skills-${escapeAttribute(entry.id)}">
+          <h4 id="skills-${escapeAttribute(entry.id)}" class="subheading">技能資訊</h4>
+          <ul class="skill-list">${renderSkillList(entry)}</ul>
         </section>
 
-        <section class="details-section" aria-label="${escapeAttribute(build.name)} 視覺詳情">
+        <section class="details-section" aria-label="${escapeAttribute(entry.name)} 視覺詳情">
           <div class="details-grid">
             <div class="detail-box">
               <span class="copy-label">優勢</span>
-              <ul class="bullet-list">${renderBullets(build.strengths)}</ul>
+              <ul class="bullet-list">${renderBullets(entry.strengths)}</ul>
             </div>
             <div class="detail-box">
               <span class="copy-label">留意事項</span>
-              <ul class="bullet-list">${renderBullets(build.concerns)}</ul>
+              <ul class="bullet-list">${renderBullets(entry.concerns)}</ul>
             </div>
           </div>
         </section>
 
-        <section class="review-panel" aria-label="${escapeAttribute(build.name)} Review">
+        <section class="review-panel" aria-label="${escapeAttribute(entry.name)} Review">
           <h4 class="subheading">本機 Review</h4>
           <div class="review-grid">
             <label class="review-field">
               <span>整體評分</span>
               <select data-review-key="overall" aria-label="整體評分">${selectOptions(review.overall, true)}</select>
             </label>
-            ${metricMarkup(build.id, "identity", "識別度")}
-            ${metricMarkup(build.id, "burst", "爆發感")}
-            ${metricMarkup(build.id, "sustain", "持續感")}
-            ${metricMarkup(build.id, "weight", "視覺重量")}
+            ${metricMarkup(entry.id, "identity", "識別度")}
+            ${metricMarkup(entry.id, "burst", "爆發感")}
+            ${metricMarkup(entry.id, "sustain", "持續感")}
+            ${metricMarkup(entry.id, "weight", "視覺重量")}
             <label class="review-field review-field-wide">
               <span>備註文字</span>
               <textarea data-review-key="notes" maxlength="5000" placeholder="記下你看到的節奏、辨識度或需要調整的地方……">${escapeHtml(review.notes || "")}</textarea>
@@ -331,20 +415,29 @@ function renderCard(build, index) {
 }
 
 function renderBuildGrid() {
-  const visible = selectedBuilds();
+  const visible = selectedEntries();
   buildGrid.className = `build-grid ${state.mode}`;
   if (!visible.length) {
-    buildGrid.innerHTML = `<div class="error-state">找不到目前選擇的 Build。</div>`;
+    buildGrid.innerHTML = `<div class="error-state">找不到目前選擇的項目。</div>`;
     return;
   }
   buildGrid.innerHTML = visible.map(renderCard).join("");
-  viewSummary.textContent = state.mode === "single"
-    ? `目前檢視：${visible[0].name}`
-    : state.mode === "compare" ? "三套 Build 並排檢視" : "兩套 Build 焦點比較";
+  if (state.mode === "single") {
+    viewSummary.textContent = `目前檢視：${visible[0].name}`;
+  } else if (state.mode === "compare") {
+    viewSummary.textContent = isNightLord() ? "六招技能並排檢視" : "三套 Build 並排檢視";
+  } else {
+    viewSummary.textContent = isNightLord() ? "兩招焦點比較" : "兩套 Build 焦點比較";
+  }
   attachMediaFallbacks();
 }
 
 function renderChecklist() {
+  checklistPanel.hidden = isNightLord();
+  if (isNightLord()) {
+    checklist.replaceChildren();
+    return;
+  }
   checklist.innerHTML = CHECKLIST_ITEMS.map((item) => `
     <label class="check-item">
       <input type="checkbox" data-checklist-id="${escapeAttribute(item.id)}" ${state.local.checklist[item.id] ? "checked" : ""}>
@@ -354,6 +447,7 @@ function renderChecklist() {
 }
 
 function renderAll() {
+  renderHeader();
   renderControls();
   renderObservations();
   renderBuildGrid();
@@ -375,23 +469,25 @@ function attachMediaFallbacks() {
       const fallback = shell.querySelector(".poster-fallback");
       const status = shell.querySelector(".media-status");
       video.hidden = true;
-      fallback.hidden = false;
-      status.hidden = false;
+      if (fallback) fallback.hidden = false;
+      if (status) status.hidden = false;
     }, { once: true });
   });
 
   buildGrid.querySelectorAll(".poster-fallback").forEach((image) => {
     image.addEventListener("error", () => {
       const status = image.closest(".media-shell").querySelector(".media-status");
-      status.textContent = "影片與 PNG poster 都無法載入，請檢查素材路徑。";
-      status.hidden = false;
+      if (status) {
+        status.textContent = "影片與 PNG poster 都無法載入，請檢查素材路徑。";
+        status.hidden = false;
+      }
     }, { once: true });
   });
 }
 
-function reviewFor(buildId) {
-  if (!state.local.reviews[buildId]) state.local.reviews[buildId] = {};
-  return state.local.reviews[buildId];
+function reviewFor(entryId) {
+  if (!state.local.reviews[entryId]) state.local.reviews[entryId] = {};
+  return state.local.reviews[entryId];
 }
 
 function handleReviewChange(target) {
@@ -424,13 +520,13 @@ function editCopy(card) {
 }
 
 function saveCopy(card) {
-  const buildId = card.dataset.buildId;
+  const entryId = card.dataset.buildId;
   const values = {};
   card.querySelectorAll("[data-copy-field]").forEach((block) => {
     const text = block.querySelector(".copy-text").innerText.trim().slice(0, 5000);
     values[block.dataset.copyField] = text;
   });
-  state.local.copyOverrides[buildId] = values;
+  state.local.copyOverrides[entryId] = values;
   saveLocalState();
   renderAll();
   setStatus("文案已儲存到本機。分享網址不會包含這些本機內容，請用匯出 JSON 傳遞。 ");
@@ -442,7 +538,7 @@ function cancelCopy() {
 
 function ensureDistinctFocus(changed) {
   if (state.focusIds[0] !== state.focusIds[1]) return;
-  const replacement = builds().find((build) => build.id !== state.focusIds[changed]);
+  const replacement = entries().find((entry) => entry.id !== state.focusIds[changed]);
   if (!replacement) return;
   state.focusIds[changed === 0 ? 1 : 0] = replacement.id;
 }
@@ -462,9 +558,10 @@ function downloadJson(filename, value) {
 function exportReview() {
   const exported = {
     schemaVersion: 1,
+    classId: state.classId,
     exportedAt: new Date().toISOString(),
     prototype: state.data.prototype,
-    source: "Hero Review 本機複核頁",
+    source: `${CLASS_LABELS[state.classId]} Review 本機複核頁`,
     reviews: state.local.reviews,
     checklist: state.local.checklist,
     copyOverrides: state.local.copyOverrides,
@@ -475,7 +572,7 @@ function exportReview() {
     }
   };
   const stamp = new Date().toISOString().slice(0, 10);
-  downloadJson(`hero-review-${stamp}.json`, exported);
+  downloadJson(`${state.classId}-review-${stamp}.json`, exported);
   setStatus("Review JSON 已匯出。文案與備註可透過這個檔案交給其他人匯入。 ");
 }
 
@@ -485,11 +582,14 @@ async function importReview(file) {
     if (!parsed || typeof parsed !== "object" || (!parsed.reviews && !parsed.checklist && !parsed.copyOverrides)) {
       throw new Error("格式不包含 Review 資料");
     }
+    if (parsed.classId && parsed.classId !== state.classId) {
+      throw new Error(`這份檔案屬於${CLASS_LABELS[parsed.classId] || parsed.classId}，請先切換職業`);
+    }
     state.local = normaliseLocalState(parsed);
     if (parsed.view && MODES.includes(parsed.view.mode)) state.mode = parsed.view.mode;
-    if (validBuildId(parsed.view?.selectedId)) state.selectedId = parsed.view.selectedId;
+    if (validEntryId(parsed.view?.selectedId)) state.selectedId = parsed.view.selectedId;
     if (Array.isArray(parsed.view?.focusIds)) {
-      const ids = parsed.view.focusIds.filter(validBuildId).slice(0, 2);
+      const ids = parsed.view.focusIds.filter(validEntryId).slice(0, 2);
       if (ids.length === 2 && ids[0] !== ids[1]) state.focusIds = ids;
     }
     saveLocalState();
@@ -504,30 +604,41 @@ async function importReview(file) {
 }
 
 function resetReview() {
-  if (!window.confirm("確定要清除這個瀏覽器中的 Hero Review、文案修改與 checklist 嗎？")) return;
+  if (!window.confirm(`確定要清除這個瀏覽器中的${CLASS_LABELS[state.classId]} Review、文案修改與備註嗎？`)) return;
   state.local = emptyLocalState();
   saveLocalState();
   renderAll();
-  setStatus("本機 Review、文案修改與 checklist 已清除。 ");
+  setStatus("本機 Review、文案修改與備註已清除。 ");
 }
 
-async function loadData() {
+async function loadData(classId, fromUrl = false) {
+  state.classId = classId;
+  state.data = null;
+  state.local = loadLocalState(classId);
+  resetViewForData();
+  app.setAttribute("aria-busy", "true");
   try {
-    const response = await fetch(DATA_URL, { cache: "no-store" });
+    const response = await fetch(DATA_URLS[classId], { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     state.data = await response.json();
-    if (!Array.isArray(state.data.builds) || state.data.builds.length !== 3) {
-      throw new Error("Hero Build 資料數量不正確");
+    if (!Array.isArray(state.data.builds || state.data.skills) || entries().length === 0) {
+      throw new Error("視覺複核資料格式不正確");
     }
-    readUrlState();
+    if (fromUrl) readUrlState();
     renderAll();
     writeUrlState();
+    setStatus(`${CLASS_LABELS[state.classId]}資料已載入；本機 Review 與其他職業分開保存。`);
   } catch (error) {
     app.setAttribute("aria-busy", "false");
-    buildGrid.innerHTML = `<div class="error-state">Hero Review 資料載入失敗：${escapeHtml(error.message)}</div>`;
-    setStatus("請確認頁面是透過 HTTP 服務開啟，並且 data/hero_review.json 存在。", true);
+    buildGrid.innerHTML = `<div class="error-state">${escapeHtml(CLASS_LABELS[classId])} Review 資料載入失敗：${escapeHtml(error.message)}</div>`;
+    setStatus("請確認頁面是透過 HTTP 服務開啟，並且 showcase/data 資料存在。", true);
   }
 }
+
+classSelect.addEventListener("change", () => {
+  saveLocalState();
+  loadData(classSelect.value, false);
+});
 
 modeSelect.addEventListener("change", () => {
   state.mode = modeSelect.value;
@@ -586,4 +697,8 @@ importFile.addEventListener("change", () => {
   if (importFile.files?.[0]) importReview(importFile.files[0]);
 });
 
-loadData();
+const initialParams = new URLSearchParams(window.location.search);
+const initialClass = ["hero", "night_lord"].includes(initialParams.get("class"))
+  ? initialParams.get("class")
+  : "hero";
+loadData(initialClass, true);

@@ -15,6 +15,10 @@
           <h1>MapleIdle Combat Prototype</h1>
           <p class="lede">Hero loadout studies for a vertical combat presentation.</p>
           <a class="review-link" href="./review/">開啟 Hero Build 視覺複核／設計頁 →</a>
+          <nav class="career-switcher" aria-label="職業展示">
+            <a class="career-tab is-active" href="./index.html" aria-current="page">英雄</a>
+            <a class="career-tab" href="./review/?class=night_lord">夜使者六招 Review →</a>
+          </nav>
         </div>
         <div class="header-mark" aria-hidden="true">
           <span class="mark-core"></span>
@@ -34,6 +38,18 @@
       <p id="load-state" class="load-state" role="status">Loading build data…</p>
       <section id="build-grid" class="build-grid" aria-live="polite"></section>
 
+      <section class="night-lord-entry" aria-labelledby="night-lord-heading">
+        <div class="showcase-intro">
+          <div>
+            <p class="section-kicker">COMBAT AVATAR / NIGHT LORD</p>
+            <h2 id="night-lord-heading">夜使者六招視覺複核</h2>
+          </div>
+          <a class="review-link" href="./review/?class=night_lord">開啟夜使者單招／六招比較 →</a>
+        </div>
+        <p id="night-lord-load-state" class="load-state" role="status">Loading Night Lord skill data…</p>
+        <div id="night-lord-skill-grid" class="skill-entry-grid" aria-live="polite"></div>
+      </section>
+
       <footer class="site-footer">
         <span>STATIC SHOWCASE</span>
         <span>NO COMBAT LOGIC / NO EXTERNAL ASSETS</span>
@@ -44,6 +60,8 @@
     <script>
       const grid = document.querySelector("#build-grid");
       const loadState = document.querySelector("#load-state");
+      const nightLordGrid = document.querySelector("#night-lord-skill-grid");
+      const nightLordLoadState = document.querySelector("#night-lord-load-state");
 
       function escapeHtml(value) {
         return String(value)
@@ -52,6 +70,11 @@
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#039;");
+      }
+
+      function showcaseAsset(path) {
+        if (!path) return "";
+        return path.startsWith("assets/") ? `./${path}` : path;
       }
 
       function buildCard(build, index) {
@@ -137,7 +160,46 @@
         }
       }
 
+      function nightLordCard(skill, index) {
+        const preview = skill.preview || {};
+        const poster = showcaseAsset(preview.poster || "");
+        const titleId = `night-lord-title-${index}`;
+        const reviewUrl = `./review/?class=night_lord&mode=single&build=${encodeURIComponent(skill.id)}`;
+        const card = document.createElement("article");
+        card.className = "skill-entry-card";
+        card.innerHTML = `
+          <a class="skill-entry-link" href="${reviewUrl}" aria-labelledby="${titleId}">
+            <div class="skill-entry-media">
+              ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(preview.alt || skill.name)}">` : ""}
+            </div>
+            <div class="skill-entry-body">
+              <span class="card-kicker">NIGHT LORD / SKILL 0${index + 1}</span>
+              <h3 id="${titleId}">${escapeHtml(skill.name)}</h3>
+              <p>${escapeHtml(skill.visualGoal)}</p>
+            </div>
+          </a>
+        `;
+        return card;
+      }
+
+      async function loadNightLordReview() {
+        try {
+          const response = await fetch("./data/night_lord_review.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (!Array.isArray(data.skills) || data.skills.length !== 6) throw new Error("Invalid Night Lord skill data");
+          nightLordGrid.replaceChildren(...data.skills.map(nightLordCard));
+          nightLordLoadState.textContent = `${data.skills.length} Night Lord skills / presentation data loaded`;
+          nightLordLoadState.classList.add("is-loaded");
+        } catch (error) {
+          nightLordLoadState.textContent = "Night Lord skill data could not be loaded.";
+          nightLordLoadState.classList.add("is-error");
+          console.error("Night Lord showcase data load failed", error);
+        }
+      }
+
       loadBuilds();
+      loadNightLordReview();
     </script>
   </body>
 </html>

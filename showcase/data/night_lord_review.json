@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "prototype": "Night Lord",
+  "classId": "night_lord",
+  "title": "夜使者技能視覺複核",
+  "reviewMode": "skill",
+  "comparisonTitle": "六招視覺語彙",
+  "comparisonIntro": "先看六招的 silhouette、運動方式與節奏，再用本機 Review 欄位記錄辨識度與問題。",
+  "observations": [
+    {
+      "id": "night-lord-four-flying",
+      "name": "四飛閃",
+      "visualGoal": "快速、短促、直線連射。",
+      "expectedRhythm": "四道細直投擲在很短時間內俐落完成。"
+    },
+    {
+      "id": "night-lord-taunt-contract",
+      "name": "挑釁契約",
+      "visualGoal": "契約、鎖定、標記，讓獵物被宣告。",
+      "expectedRhythm": "外框生成、核心鎖定、留下短暫危險烙印。"
+    },
+    {
+      "id": "night-lord-fuma-shuriken",
+      "name": "風魔手裏劍",
+      "visualGoal": "大型、單核、旋轉、重型投射。",
+      "expectedRhythm": "起手凝聚，重型手裏劍持續壓進，命中後銳利收束。"
+    },
+    {
+      "id": "night-lord-dakrus-secret",
+      "name": "達克魯的秘傳",
+      "visualGoal": "多路徑、交錯、技巧型秘傳。",
+      "expectedRhythm": "啟動殘影，三道殺線錯位切入，命中後交叉消散。"
+    },
+    {
+      "id": "night-lord-spread-throw",
+      "name": "散式投擲",
+      "visualGoal": "多枚扇形散射，短時間覆蓋前方空間。",
+      "expectedRhythm": "核心分裂後同步灑出扇面，命中留下多點細碎切痕。"
+    },
+    {
+      "id": "night-lord-detonation-talisman",
+      "name": "飛閃起爆符",
+      "visualGoal": "符紙貼附、延遲、引爆。",
+      "expectedRhythm": "符紙飛入貼附，短暫亮起準備，局部爆裂後迅速消退。"
+    }
+  ],
+  "skills": [
+    {
+      "id": "night_lord_four_flying",
+      "name": "四飛閃",
+      "summary": "四道短促投擲在近乎同一個節拍內快速完成。",
+      "visualGoal": "快速、短促、直線連射，不靠大型特效撐場。",
+      "identity": "四條細直殺線；輕、快、乾淨。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/01_four_flying.png",
+        "alt": "夜使者四飛閃峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_four_flying",
+          "name": "四飛閃",
+          "role": "快速連射",
+          "visualNote": "四道細直軌跡與小型命中 flash。"
+        }
+      ],
+      "strengths": ["短促節奏清楚", "不與大型投射物搶重量"],
+      "concerns": ["需要避免看起來像單發手裏劍重播四次"]
+    },
+    {
+      "id": "night_lord_taunt_contract",
+      "name": "挑釁契約",
+      "summary": "在目標周圍建立危險契約印記，完成鎖定與宣告。",
+      "visualGoal": "契約、鎖定、標記，不走爆炸或符紙語彙。",
+      "identity": "多層幾何契約印記、收束線與暗色核心。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/02_taunt_contract.png",
+        "alt": "夜使者挑釁契約峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_taunt_contract",
+          "name": "挑釁契約",
+          "role": "契約標記",
+          "visualNote": "外框聚合、核心鎖定、殘留危險烙印。"
+        }
+      ],
+      "strengths": ["標記與契約辨識度明確", "峰值存在感集中在目標"],
+      "concerns": ["不可退化成普通圓圈 mark 或爆破技"]
+    },
+    {
+      "id": "night_lord_fuma_shuriken",
+      "name": "風魔手裏劍",
+      "summary": "大型旋轉手裏劍持續壓進目標，形成單核重型投射。",
+      "visualGoal": "大型、單核、旋轉、重型投射，讓本體主導畫面。",
+      "identity": "巨大旋轉手裏劍與厚實直線 trail。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/03_fuma_shuriken.png",
+        "alt": "夜使者風魔手裏劍峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_fuma_shuriken",
+          "name": "風魔手裏劍",
+          "role": "重型投射",
+          "visualNote": "大型本體、旋轉前進、切割型重擊。"
+        }
+      ],
+      "strengths": ["單核重量感最強", "和快速連射技能有清楚尺度差"],
+      "concerns": ["trail 不應蓋過手裏劍本體", "避免依賴裝飾弧線"]
+    },
+    {
+      "id": "night_lord_dakrus_secret",
+      "name": "達克魯的秘傳",
+      "summary": "三道錯位殺線交錯切入，表現高速而精準的忍法秘傳。",
+      "visualGoal": "多路徑、交錯、技巧型秘傳，不是單純投射物複製。",
+      "identity": "主路徑加兩道不同角度的殘影收束。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/04_dakrus_secret.png",
+        "alt": "夜使者達克魯的秘傳峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_dakrus_secret",
+          "name": "達克魯的秘傳",
+          "role": "交錯秘傳",
+          "visualNote": "不同角度殘影路徑在目標附近交錯收束。"
+        }
+      ],
+      "strengths": ["技巧型路徑語言清楚", "比風魔輕，比四飛閃複雜"],
+      "concerns": ["不要變成三次同軌跡延遲播放", "避免大型圓弧搶走路徑重點"]
+    },
+    {
+      "id": "night_lord_spread_throw",
+      "name": "散式投擲",
+      "summary": "多枚小型手裏劍同時向左右展開，形成短時間扇面壓制。",
+      "visualGoal": "多枚扇形散射、範圍覆蓋，不走單核重投射或交錯秘傳。",
+      "identity": "約五枚短薄投射物同時張開的扇面。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/05_spread_throw.png",
+        "alt": "夜使者散式投擲峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_spread_throw",
+          "name": "散式投擲",
+          "role": "扇形壓制",
+          "visualNote": "核心分裂成多枚短薄手裏劍，左右展開命中。"
+        }
+      ],
+      "strengths": ["空間覆蓋形狀直觀", "灰階 silhouette 仍能和單線技能區分"],
+      "concerns": ["不要做成達克魯的交錯路徑", "不要加入大型 shockwave"]
+    },
+    {
+      "id": "night_lord_detonation_talisman",
+      "name": "飛閃起爆符",
+      "summary": "起爆符從攻擊起點飛入、貼附、短暫蓄亮後局部炸開。",
+      "visualGoal": "符紙貼附、延遲、引爆，和挑釁契約的印記語彙分離。",
+      "identity": "可辨識的符紙 silhouette、貼附亮起與尖銳局部爆裂。",
+      "preview": {
+        "label": "正式 Gallery 峰值 capture",
+        "poster": "assets/night_lord/06_detonation_talisman.png",
+        "alt": "夜使者飛閃起爆符峰值預覽"
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能",
+          "id": "night_lord_detonation_talisman",
+          "name": "飛閃起爆符",
+          "role": "貼符引爆",
+          "visualNote": "符紙飛入貼附，延遲亮起後以 angular burst 收束。"
+        }
+      ],
+      "strengths": ["貼附到爆破的節奏明確", "和契約印記使用不同主要 silhouette"],
+      "concerns": ["避免變成普通 mark dissolve", "不要用大型環形爆炸"]
+    }
+  ]
+}

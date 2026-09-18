@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MapleIdle Hero 三套 Build 的視覺複核、比較與設計備註頁面。">
-  <title>Hero Build 視覺複核／設計頁</title>
+  <meta name="description" content="MapleIdle Hero 與 Night Lord 的視覺複核、比較與設計備註頁面。">
+  <title>職業 VFX 視覺複核／設計頁</title>
   <link rel="stylesheet" href="./style.css">
   <script src="./review.js" defer></script>
 </head>
@@ -12,9 +12,9 @@
   <header class="site-header">
     <div class="header-inner">
       <a class="back-link" href="../index.html">← 返回 Showcase</a>
-      <span class="eyebrow">MAPLEIDLE / HERO REVIEW</span>
+      <span id="class-eyebrow" class="eyebrow">MAPLEIDLE / HERO REVIEW</span>
       <h1>Hero Build 視覺複核／設計頁</h1>
-      <p class="lede">用現有 capture 的 PNG／WebM，逐一檢查三套流派的節奏、辨識度、持續感與視覺重量。</p>
+      <p class="lede">用現有 capture 的 PNG／WebM，逐一檢查各職業技能或流派的節奏、辨識度與視覺重量。</p>
     </div>
   </header>
 
@@ -25,6 +25,13 @@
         <h2 id="view-controls-title">選擇審核視角</h2>
       </div>
       <div class="toolbar-controls">
+        <label>
+          <span>職業</span>
+          <select id="class-select">
+            <option value="hero">英雄</option>
+            <option value="night_lord">夜使者</option>
+          </select>
+        </label>
         <label>
           <span>顯示模式</span>
           <select id="mode-select">
@@ -61,7 +68,7 @@
       <div class="section-heading">
         <p class="section-kicker">全域比較</p>
         <h2 id="comparison-title">比較觀察</h2>
-        <p>先確認三套 Build 的設計意圖，再用影片與 review 欄位核對實際觀感。</p>
+        <p id="comparison-intro">先確認三套 Build 的設計意圖，再用影片與 review 欄位核對實際觀感。</p>
       </div>
       <div id="observation-grid" class="observation-grid"></div>
     </section>
@@ -70,7 +77,7 @@
       <div class="section-heading build-section-heading">
         <div>
           <p class="section-kicker">視覺樣本</p>
-          <h2 id="builds-title">Hero Build 預覽</h2>
+        <h2 id="builds-title">Hero Build 預覽</h2>
         </div>
         <p id="view-summary" class="view-summary"></p>
       </div>
