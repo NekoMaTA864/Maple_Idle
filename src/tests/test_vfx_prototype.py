@@ -21,10 +21,12 @@ from vfx_prototype import (
     AreaEffect,
     ImpactEffect,
     LightningEffect,
+    MarkDetonationEffect,
     PRESETS,
     PersistentEffect,
     ProjectileEffect,
     SlashEffect,
+    SpreadProjectileEffect,
     create_effect,
     emit_vfx,
     resolve_preset,
@@ -81,6 +83,12 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             "hero_fighting_instinct": PersistentEffect,
             "hero_sacred_sword_descent": ProjectileEffect,
             "night_lord_shuriken": ProjectileEffect,
+            "night_lord_four_flying": ProjectileEffect,
+            "night_lord_taunt_contract": MarkDetonationEffect,
+            "night_lord_fuma_shuriken": ProjectileEffect,
+            "night_lord_dakrus_secret": ProjectileEffect,
+            "night_lord_spread_throw": SpreadProjectileEffect,
+            "night_lord_detonation_talisman": MarkDetonationEffect,
             "cannonball_heavy": ProjectileEffect,
             "bishop_holy_area": AreaEffect,
         }
@@ -134,6 +142,64 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         effect.update(0.25, target=(200, 40))
         self.assertEqual(effect.target, (200.0, 40.0))
         self.assertGreater(effect.position[0], 0.0)
+
+    def test_night_lord_spread_composition_uses_arbitrary_source_and_target(self):
+        effect = create_effect(
+            "night_lord_spread_throw",
+            (320, 80),
+            (40, 260),
+        )
+        self.assertIsInstance(effect, SpreadProjectileEffect)
+        self.assertEqual(len(effect.projectile_targets), 5)
+        effect.set_progress(0.5)
+        positions = effect.projectile_positions
+        self.assertEqual(len(positions), 5)
+        self.assertNotEqual(positions[0], positions[-1])
+        self.assertTrue(effect.is_alive)
+        manager = VisualEffectManager()
+        manager.add_effect(effect)
+        manager.update(effect.duration + 0.01)
+        self.assertFalse(effect.is_alive)
+        self.assertEqual(manager.effects, [])
+
+    def test_night_lord_mark_and_delayed_detonation_lifecycle(self):
+        mark = create_effect(
+            "night_lord_taunt_contract",
+            (320, 480),
+            (80, 170),
+        )
+        self.assertIsInstance(mark, MarkDetonationEffect)
+        self.assertFalse(mark.detonation)
+
+        talisman = create_effect(
+            "night_lord_detonation_talisman",
+            (320, 480),
+            (80, 170),
+        )
+        talisman.update(0.60)
+        self.assertFalse(talisman.detonation_started)
+        talisman.update(0.25)
+        self.assertTrue(talisman.detonation_started)
+        talisman.update(talisman.duration + 0.01)
+        self.assertFalse(talisman.is_alive)
+
+    def test_night_lord_compositions_do_not_consume_global_rng(self):
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        effects = [
+            create_effect("night_lord_spread_throw", (400, 500), (220, 140)),
+            create_effect("night_lord_detonation_talisman", (400, 500), (220, 140)),
+        ]
+        random.seed(7171)
+        before = random.getstate()
+        painter = QPainter(image)
+        try:
+            for effect in effects:
+                effect.set_progress(0.8)
+                effect.draw(painter)
+        finally:
+            painter.end()
+        self.assertEqual(before, random.getstate())
 
     def test_area_effect_is_localized_and_expires(self):
         effect = AreaEffect((400, 160), width=180, height=64, lifetime=0.6)
@@ -263,6 +329,21 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         self.assertTrue(hero_presets.issubset(listed))
         self.assertFalse(hasattr(VFXGalleryWindow, "combat_mgr"))
 
+    def test_gallery_exposes_each_night_lord_skill_without_combat_manager(self):
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        night_lord_presets = {
+            "night_lord_four_flying",
+            "night_lord_taunt_contract",
+            "night_lord_fuma_shuriken",
+            "night_lord_dakrus_secret",
+            "night_lord_spread_throw",
+            "night_lord_detonation_talisman",
+        }
+        listed = {preset for _label, preset in VFXGalleryWindow.PRESET_ORDER}
+        self.assertTrue(night_lord_presets.issubset(listed))
+        self.assertFalse(hasattr(VFXGalleryWindow, "combat_mgr"))
+
     def test_gallery_uses_chinese_display_names_for_review(self):
         from tools.vfx_gallery import VFXGalleryWindow
 
@@ -273,6 +354,13 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         self.assertEqual(labels["hero_spatial_slash"], "空間斬")
         self.assertEqual(labels["hero_fighting_instinct"], "鬥氣本能")
         self.assertEqual(labels["hero_sacred_sword_descent"], "聖劍降臨")
+
+        self.assertEqual(labels["night_lord_four_flying"], "四飛閃")
+        self.assertEqual(labels["night_lord_taunt_contract"], "挑釁契約")
+        self.assertEqual(labels["night_lord_fuma_shuriken"], "風魔手裏劍")
+        self.assertEqual(labels["night_lord_dakrus_secret"], "達克魯的秘傳")
+        self.assertEqual(labels["night_lord_spread_throw"], "散式投擲")
+        self.assertEqual(labels["night_lord_detonation_talisman"], "飛閃起爆符")
 
     def test_gallery_hero_triggers_build_presentation_compositions(self):
         app = QApplication.instance() or QApplication([])
@@ -286,6 +374,28 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             "hero_spatial_slash": 2,
             "hero_fighting_instinct": 2,
             "hero_sacred_sword_descent": 2,
+        }
+        for preset, expected_count in expected_counts.items():
+            window.play_preset(preset)
+            self.assertEqual(len(window.state.vfx_mgr.effects), expected_count)
+            for effect in window.state.vfx_mgr.effects:
+                self.assertFalse(any(hasattr(effect, name) for name in (
+                    "damage", "cooldown", "hit_count", "buff", "resource", "progression"
+                )))
+        window.close()
+
+    def test_gallery_night_lord_triggers_presentation_compositions(self):
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        expected_counts = {
+            "night_lord_four_flying": 2,
+            "night_lord_taunt_contract": 1,
+            "night_lord_fuma_shuriken": 2,
+            "night_lord_dakrus_secret": 4,
+            "night_lord_spread_throw": 2,
+            "night_lord_detonation_talisman": 1,
         }
         for preset, expected_count in expected_counts.items():
             window.play_preset(preset)

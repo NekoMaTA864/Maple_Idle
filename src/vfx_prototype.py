@@ -204,7 +204,8 @@ class ProjectileEffect(PrototypeEffect):
 
     def __init__(self, source, target, speed=420.0, size=14.0, lifetime=None,
                  trail=False, homing=False, color=(160, 220, 255), seed=202,
-                 shape="default", trail_length=0.12, delay=0.0, variant="normal"):
+                 shape="default", trail_length=0.12, delay=0.0, variant="normal",
+                 alpha_scale=1.0):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -224,6 +225,7 @@ class ProjectileEffect(PrototypeEffect):
         self.shape = str(shape)
         self.trail_length = max(0.02, float(trail_length))
         self.variant = str(variant)
+        self.alpha_scale = max(0.0, float(alpha_scale))
 
     @property
     def position(self) -> Point:
@@ -242,7 +244,7 @@ class ProjectileEffect(PrototypeEffect):
         if not self.has_started:
             return
         position = self.position
-        alpha = int(255 * (1.0 - self.progress))
+        alpha = int(255 * (1.0 - self.progress) * self.alpha_scale)
         if self.trail:
             trail_start = _lerp(self.source, position, max(0.0, self.progress - self.trail_length))
             trail_width = self.size * (0.25 if self.shape == "shuriken" else 0.38)
@@ -352,6 +354,231 @@ class ProjectileEffect(PrototypeEffect):
             QPointF(guard[0] - px * self.size * 1.35, guard[1] - py * self.size * 1.35),
             QPointF(guard[0] + px * self.size * 1.35, guard[1] + py * self.size * 1.35),
         )
+        painter.restore()
+
+
+class SpreadProjectileEffect(PrototypeEffect):
+    """A reusable fan of projectiles sharing one presentation lifecycle.
+
+    The fan is a visual composition only.  Each shard follows a deterministic
+    source-to-offset-target path, while the effect remains one manager item and
+    never exposes hit-count or gameplay semantics.
+    """
+
+    primitive = "spread_projectile"
+
+    def __init__(self, source, target, projectile_count=5, spread_angle=68.0,
+                 fan_radius=34.0, speed=520.0, size=11.0, lifetime=None,
+                 trail=True, trail_length=0.14, color=(176, 132, 255), seed=707,
+                 delay=0.0, shape="shuriken", alpha_scale=1.0):
+        source_point = _point(source)
+        target_point = _point(target)
+        distance = math.hypot(
+            target_point[0] - source_point[0],
+            target_point[1] - source_point[1],
+        )
+        calculated_lifetime = distance / max(1.0, float(speed))
+        super().__init__(
+            source_point,
+            target_point,
+            lifetime=max(0.08, calculated_lifetime) if lifetime is None else lifetime,
+            color=color,
+            seed=seed,
+            delay=delay,
+        )
+        self.projectile_count = max(2, int(projectile_count))
+        self.spread_angle = float(spread_angle)
+        self.fan_radius = max(0.0, float(fan_radius))
+        self.speed = max(0.0, float(speed))
+        self.size = max(1.0, float(size))
+        self.trail = bool(trail)
+        self.trail_length = max(0.02, float(trail_length))
+        self.shape = str(shape)
+        self.alpha_scale = max(0.0, float(alpha_scale))
+        self._base_angle = math.atan2(
+            target_point[1] - source_point[1],
+            target_point[0] - source_point[0],
+        )
+        self._fan_angles = tuple(
+            math.radians(offset)
+            for offset in self._build_fan_offsets()
+        )
+
+    def _build_fan_offsets(self):
+        half_angle = self.spread_angle * 0.5
+        step = self.spread_angle / max(1, self.projectile_count - 1)
+        return tuple(-half_angle + step * index for index in range(self.projectile_count))
+
+    @property
+    def projectile_targets(self) -> tuple[Point, ...]:
+        return tuple(
+            (
+                self.target[0] + math.cos(self._base_angle + angle) * self.fan_radius,
+                self.target[1] + math.sin(self._base_angle + angle) * self.fan_radius,
+            )
+            for angle in self._fan_angles
+        )
+
+    @property
+    def projectile_positions(self) -> tuple[Point, ...]:
+        return tuple(_lerp(self.source, endpoint, self.progress) for endpoint in self.projectile_targets)
+
+    def draw(self, painter) -> None:
+        if not self.has_started:
+            return
+        progress = self.progress
+        alpha = int(255 * (1.0 - progress) * self.alpha_scale)
+        if alpha <= 0:
+            return
+
+        for index, endpoint in enumerate(self.projectile_targets):
+            position = _lerp(self.source, endpoint, progress)
+            if self.trail:
+                trail_progress = max(0.0, progress - self.trail_length)
+                trail_start = _lerp(self.source, endpoint, trail_progress)
+                _draw_bloom_line(
+                    painter,
+                    trail_start,
+                    position,
+                    self.size * 0.24,
+                    self.color,
+                    int(alpha * 0.72),
+                )
+
+            angle = math.degrees(self._base_angle + self._fan_angles[index])
+            angle += progress * 900.0 + index * 19.0
+            if self.shape == "shuriken":
+                _draw_shuriken(
+                    painter,
+                    position[0],
+                    position[1],
+                    angle,
+                    self.size * 0.72,
+                    _color(self.color, alpha),
+                    core_white=True,
+                )
+            else:
+                painter.save()
+                painter.setPen(QPen(_color(self.color, alpha), 1.2))
+                painter.setBrush(QBrush(_color(self.color, alpha)))
+                painter.drawEllipse(QPointF(*position), self.size * 0.55, self.size * 0.55)
+                painter.restore()
+
+        if progress > 0.68:
+            _draw_expanding_shockwave(
+                painter,
+                self.target[0],
+                self.target[1],
+                max(self.fan_radius, self.size * 3.0),
+                (progress - 0.68) / 0.32,
+                self.color,
+                int(alpha * 0.78),
+                aspect=0.48,
+                rings=1,
+            )
+
+
+class MarkDetonationEffect(PrototypeEffect):
+    """Reusable mark presentation with an optional delayed detonation."""
+
+    primitive = "mark_detonation"
+    layer = "impact"
+
+    def __init__(self, position, size=38.0, mark_lifetime=0.72,
+                 detonation_delay=0.34, detonation_lifetime=0.42,
+                 detonation=True, color=(191, 128, 255), seed=808, delay=0.0):
+        self.position = _point(position)
+        self.size = max(1.0, float(size))
+        self.mark_lifetime = max(0.05, float(mark_lifetime))
+        self.detonation_delay = max(0.0, float(detonation_delay)) if detonation else 0.0
+        self.detonation_lifetime = max(0.05, float(detonation_lifetime)) if detonation else 0.0
+        self.detonation = bool(detonation)
+        total_lifetime = self.mark_lifetime + self.detonation_delay + self.detonation_lifetime
+        super().__init__(
+            self.position,
+            self.position,
+            lifetime=total_lifetime,
+            color=color,
+            seed=seed,
+            delay=delay,
+        )
+
+    @property
+    def detonation_started(self) -> bool:
+        if not self.detonation or not self.has_started:
+            return False
+        return self.duration * self.progress >= self.mark_lifetime + self.detonation_delay
+
+    def draw(self, painter) -> None:
+        if not self.has_started:
+            return
+        elapsed = self.duration * self.progress
+        detonation_start = self.mark_lifetime + self.detonation_delay
+        if not self.detonation or elapsed < detonation_start:
+            mark_fade = 1.0
+            if self.detonation:
+                mark_fade = min(1.0, max(0.0, (detonation_start - elapsed) / 0.10))
+                mark_fade = max(0.55, mark_fade)
+            self._draw_mark(painter, mark_fade)
+            return
+
+        detonation_progress = max(
+            0.0,
+            min(1.0, (elapsed - detonation_start) / self.detonation_lifetime),
+        )
+        fade = 1.0 - detonation_progress
+        x, y = self.position
+        if detonation_progress < 0.22:
+            flash_alpha = int(220 * (1.0 - detonation_progress / 0.22))
+            painter.setBrush(QBrush(QColor(255, 255, 245, flash_alpha)))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(QPointF(x, y), self.size * 0.72, self.size * 0.48)
+        _draw_expanding_shockwave(
+            painter,
+            x,
+            y,
+            self.size * 1.9,
+            detonation_progress,
+            self.color,
+            int(240 * fade),
+            aspect=0.56,
+            rings=2,
+        )
+        rnd = random.Random(self.seed)
+        painter.save()
+        painter.setPen(QPen(QColor(244, 226, 255, int(220 * fade)), max(1.0, self.size * 0.045)))
+        for index in range(8):
+            angle = index * math.pi / 4.0 + rnd.uniform(-0.12, 0.12)
+            inner = self.size * (0.38 + detonation_progress * 0.22)
+            outer = self.size * (0.92 + detonation_progress * 0.90)
+            painter.drawLine(
+                QPointF(x + math.cos(angle) * inner, y + math.sin(angle) * inner),
+                QPointF(x + math.cos(angle) * outer, y + math.sin(angle) * outer),
+            )
+        painter.restore()
+
+    def _draw_mark(self, painter, fade) -> None:
+        x, y = self.position
+        pulse = 0.92 + 0.08 * math.sin(self.progress * math.pi * 5.0)
+        radius = self.size * pulse
+        alpha = int(220 * max(0.0, min(1.0, fade)))
+        painter.save()
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(_color(self.color, int(alpha * 0.86)), max(1.4, self.size * 0.055)))
+        painter.drawEllipse(QPointF(x, y), radius, radius * 0.58)
+        painter.setPen(QPen(QColor(255, 244, 210, int(alpha * 0.92)), max(1.0, self.size * 0.035)))
+        painter.drawLine(QPointF(x - radius * 0.72, y), QPointF(x + radius * 0.72, y))
+        painter.drawLine(QPointF(x, y - radius * 0.43), QPointF(x, y + radius * 0.43))
+        painter.drawLine(
+            QPointF(x - radius * 0.47, y - radius * 0.28),
+            QPointF(x + radius * 0.47, y + radius * 0.28),
+        )
+        painter.drawLine(
+            QPointF(x - radius * 0.47, y + radius * 0.28),
+            QPointF(x + radius * 0.47, y - radius * 0.28),
+        )
+        painter.setPen(QPen(QColor(232, 190, 255, int(alpha * 0.72)), max(1.0, self.size * 0.025)))
+        painter.drawEllipse(QPointF(x, y), radius * 0.28, radius * 0.28)
         painter.restore()
 
 
@@ -624,6 +851,38 @@ PRESETS = {
         {"speed": 720.0, "size": 13.0, "lifetime": 0.48, "trail": True,
          "trail_length": 0.10, "shape": "shuriken", "color": (176, 132, 255), "seed": 1202},
     ),
+    "night_lord_four_flying": VFXPreset(
+        "night_lord_four_flying", "projectile",
+        {"speed": 880.0, "size": 9.0, "lifetime": 0.46, "trail": True,
+         "trail_length": 0.08, "shape": "shuriken", "color": (205, 168, 255), "seed": 2201},
+    ),
+    "night_lord_taunt_contract": VFXPreset(
+        "night_lord_taunt_contract", "mark",
+        {"size": 42.0, "mark_lifetime": 1.15, "detonation": False,
+         "color": (219, 128, 255), "seed": 2202},
+    ),
+    "night_lord_fuma_shuriken": VFXPreset(
+        "night_lord_fuma_shuriken", "projectile",
+        {"speed": 430.0, "size": 29.0, "lifetime": 0.88, "trail": True,
+         "trail_length": 0.22, "shape": "shuriken", "color": (191, 143, 255), "seed": 2203},
+    ),
+    "night_lord_dakrus_secret": VFXPreset(
+        "night_lord_dakrus_secret", "projectile",
+        {"speed": 660.0, "size": 18.0, "lifetime": 0.60, "trail": True,
+         "trail_length": 0.16, "shape": "shuriken", "color": (124, 91, 190), "seed": 2204},
+    ),
+    "night_lord_spread_throw": VFXPreset(
+        "night_lord_spread_throw", "spread",
+        {"projectile_count": 5, "spread_angle": 78.0, "fan_radius": 42.0,
+         "speed": 520.0, "size": 12.0, "lifetime": 0.72, "trail": True,
+         "trail_length": 0.16, "shape": "shuriken", "color": (182, 136, 255), "seed": 2205},
+    ),
+    "night_lord_detonation_talisman": VFXPreset(
+        "night_lord_detonation_talisman", "mark",
+        {"size": 46.0, "mark_lifetime": 0.36, "detonation_delay": 0.42,
+         "detonation_lifetime": 0.48, "detonation": True,
+         "color": (244, 146, 255), "seed": 2206},
+    ),
     "cannonball_heavy": VFXPreset(
         "cannonball_heavy", "projectile",
         {"speed": 270.0, "size": 29.0, "lifetime": 1.15, "trail": True,
@@ -654,6 +913,13 @@ def create_effect(preset: str | VFXPreset, source, target=None, **overrides) -> 
         if target is None:
             raise ValueError("Projectile presets require a target position")
         return ProjectileEffect(source, target, **params)
+    if definition.effect_type == "spread":
+        if target is None:
+            raise ValueError("Spread presets require a target position")
+        return SpreadProjectileEffect(source, target, **params)
+    if definition.effect_type == "mark":
+        position = target if target is not None else source
+        return MarkDetonationEffect(position, **params)
     if definition.effect_type == "area":
         # Area presets target a battlefield region; an explicit center wins,
         # otherwise use the target point when one is supplied.
@@ -674,11 +940,13 @@ __all__ = [
     "AreaEffect",
     "ImpactEffect",
     "LightningEffect",
+    "MarkDetonationEffect",
     "PRESETS",
     "PersistentEffect",
     "ProjectileEffect",
     "PrototypeEffect",
     "SlashEffect",
+    "SpreadProjectileEffect",
     "VFXPreset",
     "create_effect",
     "emit_vfx",

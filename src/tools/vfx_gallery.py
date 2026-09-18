@@ -148,6 +148,12 @@ class VFXGalleryWindow(QMainWindow):
         ("空間斬", "hero_spatial_slash"),
         ("鬥氣本能", "hero_fighting_instinct"),
         ("聖劍降臨", "hero_sacred_sword_descent"),
+        ("四飛閃", "night_lord_four_flying"),
+        ("挑釁契約", "night_lord_taunt_contract"),
+        ("風魔手裏劍", "night_lord_fuma_shuriken"),
+        ("達克魯的秘傳", "night_lord_dakrus_secret"),
+        ("散式投擲", "night_lord_spread_throw"),
+        ("飛閃起爆符", "night_lord_detonation_talisman"),
         ("舊版英雄斬擊", "hero_slash"),
         ("夜使者手裏劍", "night_lord_shuriken"),
         ("重型加農砲彈", "cannonball_heavy"),
@@ -160,6 +166,12 @@ class VFXGalleryWindow(QMainWindow):
         "hero_spatial_slash": ("hero", "tip", "hit"),
         "hero_fighting_instinct": ("hero", "center", "hit"),
         "hero_sacred_sword_descent": ("hero", "tip", "hit"),
+        "night_lord_four_flying": ("night_lord", "attack_origin", "hit"),
+        "night_lord_taunt_contract": ("night_lord", "attack_origin", "hit"),
+        "night_lord_fuma_shuriken": ("night_lord", "attack_origin", "hit"),
+        "night_lord_dakrus_secret": ("night_lord", "attack_origin", "hit"),
+        "night_lord_spread_throw": ("night_lord", "attack_origin", "hit"),
+        "night_lord_detonation_talisman": ("night_lord", "attack_origin", "hit"),
         "hero_slash": ("hero", "tip", "hit"),
         "night_lord_shuriken": ("night_lord", "attack_origin", "hit"),
         "cannonball_heavy": ("cannon", "muzzle", "hit"),
@@ -322,6 +334,45 @@ class VFXGalleryWindow(QMainWindow):
                 )
                 effects.append(effect)
                 self.state.queue_impact(effect, size=16, color=(214, 182, 255), lifetime=0.22)
+        elif preset_name == "night_lord_four_flying":
+            effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(effect)
+            self._add_delayed_impact(target, 24, (205, 168, 255), 0.22, 2201 + 700, 0.46)
+        elif preset_name == "night_lord_taunt_contract":
+            # The mark is a pressure/debuff read only; it does not create a
+            # debuff object or any gameplay state.
+            effects.append(emit_vfx(self.state.vfx_mgr, definition, source, target))
+        elif preset_name == "night_lord_fuma_shuriken":
+            effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(effect)
+            self._add_delayed_impact(target, 56, (218, 181, 255), 0.34, 2203 + 700, 0.82)
+        elif preset_name == "night_lord_dakrus_secret":
+            # Shadow copies are delayed presentation afterimages, not clones
+            # and not additional gameplay actors.
+            main = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(main)
+            for index, (delay, size, alpha_scale) in enumerate(
+                ((0.055, 15.0, 0.38), (0.11, 13.0, 0.24)), start=1
+            ):
+                effects.append(emit_vfx(
+                    self.state.vfx_mgr,
+                    definition,
+                    source,
+                    target,
+                    delay=delay,
+                    size=size,
+                    alpha_scale=alpha_scale,
+                    seed=int(definition.params["seed"]) + index,
+                ))
+            self._add_delayed_impact(target, 38, (168, 128, 235), 0.28, 2204 + 700, 0.60)
+        elif preset_name == "night_lord_spread_throw":
+            effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
+            effects.append(effect)
+            self._add_delayed_impact(target, 48, (200, 164, 255), 0.30, 2205 + 700, 0.72)
+        elif preset_name == "night_lord_detonation_talisman":
+            # MarkDetonationEffect owns the mark -> delay -> detonation visual
+            # timeline; the gallery does not create a gameplay debuff/timer.
+            effects.append(emit_vfx(self.state.vfx_mgr, definition, source, target))
         elif preset_name == "cannonball_heavy":
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
@@ -342,6 +393,8 @@ class VFXGalleryWindow(QMainWindow):
         primitive_names = {
             "slash": "斬擊",
             "projectile": "投射物",
+            "spread": "扇形投射",
+            "mark": "符咒／起爆",
             "area": "地面範圍",
             "persistent": "持續效果",
         }
