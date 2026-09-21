@@ -445,6 +445,26 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         forbidden = ("damage", "cooldown", "hit_count", "buff", "resource", "progression")
         self.assertFalse(any(hasattr(effect, name) for name in forbidden))
 
+    def test_cannoneer_cannon_barrage_keeps_late_shot_lanes_separate(self):
+        effect = create_effect("cannon_barrage", (400, 480), (400, 120))
+
+        landing_points = [
+            effect.cannon_landing_point(index)
+            for index in range(effect.visual_shots)
+        ]
+        self.assertEqual(len(landing_points), 4)
+        self.assertEqual(len({round(point[0], 5) for point in landing_points}), 4)
+        self.assertEqual({round(point[1], 5) for point in landing_points}, {120.0})
+        self.assertGreater(
+            max(point[0] for point in landing_points)
+            - min(point[0] for point in landing_points),
+            effect.size * 1.5,
+        )
+        self.assertEqual(landing_points, [
+            effect.cannon_landing_point(index)
+            for index in range(effect.visual_shots)
+        ])
+
         app = QApplication.instance() or QApplication([])
         from tools.vfx_gallery import VFXGalleryWindow
 

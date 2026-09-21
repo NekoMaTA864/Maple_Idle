@@ -298,7 +298,7 @@ class ProjectileEffect(PrototypeEffect):
                  alpha_scale=1.0, spin_rate=980.0, wind_streaks=0,
                  trail_width_scale=None, style="default", visual_shots=1,
                  shot_spacing=0.0, shot_travel=0.80, recoil_scale=0.0,
-                 muzzle_flash=False):
+                 muzzle_flash=False, landing_spread=0.0):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -332,6 +332,7 @@ class ProjectileEffect(PrototypeEffect):
         self.shot_travel = max(0.08, float(shot_travel))
         self.recoil_scale = max(0.0, float(recoil_scale))
         self.muzzle_flash = bool(muzzle_flash)
+        self.landing_spread = max(0.0, float(landing_spread))
 
     @property
     def position(self) -> Point:
@@ -446,6 +447,13 @@ class ProjectileEffect(PrototypeEffect):
                 # as mass, while the final approach still lands decisively.
                 travel_ratio = 1.0 - (1.0 - max(0.0, shot_progress)) ** 1.18
                 position = _lerp(self.source, self.target, travel_ratio)
+                # Keep the opening on one heavy firing line, then fan the
+                # shells into deterministic landing lanes only near the Boss.
+                # This preserves the cannonade read without stacking every
+                # shell on the same final pixel.
+                lane_blend = min(1.0, max(0.0, (shot_progress - 0.46) / 0.42))
+                landing_point = self.cannon_landing_point(shot_index)
+                position = _lerp(position, landing_point, lane_blend)
                 trail_ratio = max(0.0, travel_ratio - 0.24)
                 trail_start = _lerp(self.source, position, trail_ratio)
                 trail_alpha = int(base_alpha * (0.68 + 0.20 * (1.0 - shot_progress)))
@@ -488,7 +496,7 @@ class ProjectileEffect(PrototypeEffect):
             if echo_alpha <= 0:
                 continue
             span = self.size * (0.44 + 0.28 * echo_progress)
-            center = self.target
+            center = self.cannon_landing_point(shot_index)
             painter.save()
             painter.setPen(QPen(
                 QColor(255, 229, 169, echo_alpha),
@@ -504,6 +512,26 @@ class ProjectileEffect(PrototypeEffect):
                             center[1] + ny * span + py * side * self.size * 0.42),
                 )
             painter.restore()
+
+    def cannon_landing_point(self, shot_index):
+        """Return a deterministic late-stage landing lane for a shell.
+
+        The lane is presentation geometry only. It stays perpendicular to
+        the source-to-target line and is intentionally small enough to read
+        as a heavy cannonade rather than a spread projectile attack.
+        """
+        if self.visual_shots <= 1 or self.landing_spread <= 0.0:
+            return self.target
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        px, py = -dy / distance, dx / distance
+        lane_factor = (shot_index / (self.visual_shots - 1)) * 2.0 - 1.0
+        offset = lane_factor * self.size * self.landing_spread
+        return (
+            self.target[0] + px * offset,
+            self.target[1] + py * offset,
+        )
 
     def _draw_cannon_muzzle(self, painter, nx, ny, px, py, pulse, alpha):
         """Show pressure, flame, and rearward recoil at the cannon muzzle."""
@@ -1634,6 +1662,7 @@ _CANNON_BARRAGE_PARAMS = {
     "visual_shots": 4,
     "shot_spacing": 0.18,
     "shot_travel": 0.86,
+    "landing_spread": 0.90,
     "recoil_scale": 1.0,
     "muzzle_flash": True,
     "color": (255, 145, 70),
