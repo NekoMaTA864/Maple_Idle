@@ -124,7 +124,8 @@ class SlashEffect(PrototypeEffect):
 
     def __init__(self, source, target=None, size=84.0, lifetime=0.55, arc=115.0,
                  angle=None, fade=True, color=(255, 220, 120), seed=101, delay=0.0,
-                 style="ribbon", variant="normal", alpha_scale=1.0):
+                 style="ribbon", variant="normal", alpha_scale=1.0,
+                 offset=(0.0, 0.0)):
         super().__init__(source, target, lifetime=lifetime, color=color, seed=seed, delay=delay)
         self.size = float(size)
         self.arc = float(arc)
@@ -133,12 +134,16 @@ class SlashEffect(PrototypeEffect):
         self.style = str(style)
         self.variant = str(variant)
         self.alpha_scale = max(0.0, float(alpha_scale))
+        self.offset = _point(offset)
 
     def draw(self, painter) -> None:
         if not self.has_started:
             return
         if self.style == "rift":
             self._draw_rift(painter)
+            return
+        if self.style == "phantom":
+            self._draw_phantom(painter)
             return
         progress = self.progress
         center = _lerp(self.source, self.target, min(1.0, progress * 1.2))
@@ -179,6 +184,68 @@ class SlashEffect(PrototypeEffect):
                 self.size * 0.58, (progress - 0.60) / 0.40,
                 self.color, alpha, aspect=0.30, rings=1,
             )
+
+    def _draw_phantom(self, painter) -> None:
+        """Draw a detached, translucent blade afterimage.
+
+        ``offset`` is a presentation-space displacement from the primary
+        slash pose. It keeps delayed illusion copies visually separated while
+        preserving the shared SlashEffect lifecycle and API.
+        """
+        progress = self.progress
+        center = _lerp(self.source, self.target, 0.36 + min(0.64, progress * 0.82))
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        direction = self.angle if self.angle is not None else math.degrees(math.atan2(dy, dx))
+        radians = math.radians(direction)
+        normal = (-math.sin(radians), math.cos(radians))
+        lateral_offset = math.sin(self.seed * 0.17) * self.size * 0.05
+        cx = center[0] + normal[0] * lateral_offset + self.offset[0]
+        cy = center[1] + normal[1] * lateral_offset + self.offset[1]
+        direction_vec = (math.cos(radians), math.sin(radians))
+        length = self.size * (0.52 + 0.10 * math.sin(progress * math.pi))
+        width = self.size * (0.15 + 0.025 * math.sin(progress * math.pi))
+        front = (
+            cx + direction_vec[0] * length * 0.56,
+            cy + direction_vec[1] * length * 0.56,
+        )
+        shoulder = (
+            cx - direction_vec[0] * length * 0.08,
+            cy - direction_vec[1] * length * 0.08,
+        )
+        tail = (
+            cx - direction_vec[0] * length * 0.50,
+            cy - direction_vec[1] * length * 0.50,
+        )
+        front_left = (front[0] + normal[0] * width * 0.22, front[1] + normal[1] * width * 0.22)
+        front_right = (front[0] - normal[0] * width * 0.22, front[1] - normal[1] * width * 0.22)
+        shoulder_left = (shoulder[0] + normal[0] * width, shoulder[1] + normal[1] * width)
+        shoulder_right = (shoulder[0] - normal[0] * width, shoulder[1] - normal[1] * width)
+        tail_left = (tail[0] + normal[0] * width * 0.28, tail[1] + normal[1] * width * 0.28)
+        tail_right = (tail[0] - normal[0] * width * 0.28, tail[1] - normal[1] * width * 0.28)
+        alpha = int(175 * (1.0 - progress) * self.alpha_scale)
+        if alpha <= 0:
+            return
+
+        blade = QPainterPath(QPointF(*front))
+        blade.lineTo(QPointF(*front_left))
+        blade.lineTo(QPointF(*shoulder_left))
+        blade.lineTo(QPointF(*tail_left))
+        blade.lineTo(QPointF(*tail_right))
+        blade.lineTo(QPointF(*shoulder_right))
+        blade.lineTo(QPointF(*front_right))
+        blade.closeSubpath()
+        gradient = QLinearGradient(QPointF(*tail), QPointF(*front))
+        gradient.setColorAt(0.0, _color(self.color, int(alpha * 0.08)))
+        gradient.setColorAt(0.52, _color(self.color, int(alpha * 0.34)))
+        gradient.setColorAt(1.0, QColor(245, 250, 255, int(alpha * 0.72)))
+        painter.save()
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(QPen(_color(self.color, int(alpha * 0.78)), max(1.0, self.size * 0.018)))
+        painter.drawPath(blade)
+        painter.setPen(QPen(QColor(255, 255, 255, int(alpha * 0.78)), max(1.0, self.size * 0.012)))
+        painter.drawLine(QPointF(*tail), QPointF(*front))
+        painter.restore()
 
     def _draw_rift(self, painter) -> None:
         """Draw the sandbox-proven spatial slash geometry as a slash style.
@@ -229,7 +296,9 @@ class ProjectileEffect(PrototypeEffect):
                  trail=False, homing=False, color=(160, 220, 255), seed=202,
                  shape="default", trail_length=0.12, delay=0.0, variant="normal",
                  alpha_scale=1.0, spin_rate=980.0, wind_streaks=0,
-                 trail_width_scale=None, style="default"):
+                 trail_width_scale=None, style="default", visual_shots=1,
+                 shot_spacing=0.0, shot_travel=0.80, recoil_scale=0.0,
+                 muzzle_flash=False):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -256,6 +325,13 @@ class ProjectileEffect(PrototypeEffect):
             None if trail_width_scale is None else max(0.0, float(trail_width_scale))
         )
         self.style = str(style)
+        # These fields describe one presentation sequence only. They are
+        # deliberately not hit_count, damage, or any other gameplay state.
+        self.visual_shots = max(1, int(visual_shots))
+        self.shot_spacing = max(0.0, float(shot_spacing))
+        self.shot_travel = max(0.08, float(shot_travel))
+        self.recoil_scale = max(0.0, float(recoil_scale))
+        self.muzzle_flash = bool(muzzle_flash)
 
     @property
     def position(self) -> Point:
@@ -275,6 +351,9 @@ class ProjectileEffect(PrototypeEffect):
             return
         position = self.position
         alpha = int(255 * (1.0 - self.progress) * self.alpha_scale)
+        if self.shape == "cannonball" and self.style == "cannon_combo":
+            self._draw_cannon_combo(painter)
+            return
         if self.trail and self.style not in ("heavy_shuriken", "secret_route"):
             trail_start = _lerp(self.source, position, max(0.0, self.progress - self.trail_length))
             default_width = 0.25 if self.shape == "shuriken" else 0.38
@@ -334,6 +413,153 @@ class ProjectileEffect(PrototypeEffect):
         painter.setBrush(QBrush(QColor(255, 255, 255, alpha)))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(QPointF(*position), self.size * 0.30, self.size * 0.30)
+        painter.restore()
+
+    def _draw_cannon_combo(self, painter):
+        """Draw a slow, weighty cannonade as one presentation lifecycle.
+
+        The sequence is intentionally visual-only: each shell is a timed
+        presentation pass inside one manager effect. The existing Gallery
+        may add one shared impact effect at the end without creating a
+        gameplay hit queue or a second renderer.
+        """
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / distance, dy / distance
+        px, py = -ny, nx
+        elapsed = self.duration * self.progress
+        sequence_fade = 1.0 - max(0.0, self.progress - 0.76) / 0.24
+        base_alpha = int(245 * self.alpha_scale * max(0.0, min(1.0, sequence_fade)))
+        if base_alpha <= 0:
+            return
+
+        for shot_index in range(self.visual_shots):
+            launch_time = shot_index * self.shot_spacing
+            shot_elapsed = elapsed - launch_time
+            if shot_elapsed < 0.0:
+                continue
+            shot_progress = shot_elapsed / self.shot_travel
+
+            if shot_progress <= 1.0:
+                # Ease-in keeps the projectile on screen long enough to read
+                # as mass, while the final approach still lands decisively.
+                travel_ratio = 1.0 - (1.0 - max(0.0, shot_progress)) ** 1.18
+                position = _lerp(self.source, self.target, travel_ratio)
+                trail_ratio = max(0.0, travel_ratio - 0.24)
+                trail_start = _lerp(self.source, position, trail_ratio)
+                trail_alpha = int(base_alpha * (0.68 + 0.20 * (1.0 - shot_progress)))
+                _draw_bloom_line(
+                    painter,
+                    trail_start,
+                    position,
+                    max(4.0, self.size * 0.28),
+                    self.color,
+                    trail_alpha,
+                )
+                _draw_bloom_line(
+                    painter,
+                    _lerp(trail_start, position, 0.30),
+                    position,
+                    max(1.8, self.size * 0.09),
+                    (255, 224, 158),
+                    int(trail_alpha * 0.78),
+                    core_white=True,
+                )
+
+                if self.muzzle_flash and shot_progress < 0.18:
+                    muzzle_progress = shot_progress / 0.18
+                    self._draw_cannon_muzzle(
+                        painter,
+                        nx,
+                        ny,
+                        px,
+                        py,
+                        1.0 - muzzle_progress,
+                        int(base_alpha * (1.0 - muzzle_progress * 0.35)),
+                    )
+                self._draw_cannonball(painter, position, int(base_alpha * 0.96))
+                continue
+
+            # Completed shells leave compact pressure echoes. They are open
+            # directional marks, not extra rings or a generic circular blast.
+            echo_progress = min(1.0, (shot_progress - 1.0) / 0.30)
+            echo_alpha = int(base_alpha * 0.58 * (1.0 - echo_progress))
+            if echo_alpha <= 0:
+                continue
+            span = self.size * (0.44 + 0.28 * echo_progress)
+            center = self.target
+            painter.save()
+            painter.setPen(QPen(
+                QColor(255, 229, 169, echo_alpha),
+                max(1.5, self.size * 0.055 * (1.0 - echo_progress * 0.35)),
+                Qt.SolidLine,
+                Qt.RoundCap,
+            ))
+            for side in (-1.0, 1.0):
+                painter.drawLine(
+                    QPointF(center[0] - nx * span * 0.72 + px * side * self.size * 0.18,
+                            center[1] - ny * span * 0.72 + py * side * self.size * 0.18),
+                    QPointF(center[0] + nx * span + px * side * self.size * 0.42,
+                            center[1] + ny * span + py * side * self.size * 0.42),
+                )
+            painter.restore()
+
+    def _draw_cannon_muzzle(self, painter, nx, ny, px, py, pulse, alpha):
+        """Show pressure, flame, and rearward recoil at the cannon muzzle."""
+        if alpha <= 0 or self.recoil_scale <= 0.0:
+            return
+        source = self.source
+        recoil = self.size * self.recoil_scale * (0.48 + 0.34 * pulse)
+        cone_length = self.size * (0.72 + 0.25 * pulse)
+        cone_width = self.size * (0.34 + 0.16 * pulse)
+        painter.save()
+
+        smoke = QRadialGradient(
+            QPointF(source[0] - nx * self.size * 0.16, source[1] - ny * self.size * 0.16),
+            self.size * 0.72,
+        )
+        smoke.setColorAt(0.0, QColor(255, 241, 190, int(alpha * 0.72)))
+        smoke.setColorAt(0.45, QColor(255, 132, 54, int(alpha * 0.42)))
+        smoke.setColorAt(1.0, QColor(104, 61, 53, 0))
+        painter.setBrush(QBrush(smoke))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(
+            QPointF(source[0] + nx * self.size * 0.18, source[1] + ny * self.size * 0.18),
+            self.size * 0.72,
+            self.size * 0.48,
+        )
+
+        cone = QPainterPath(QPointF(
+            source[0] + nx * self.size * 0.05,
+            source[1] + ny * self.size * 0.05,
+        ))
+        cone.lineTo(QPointF(
+            source[0] + nx * cone_length + px * cone_width,
+            source[1] + ny * cone_length + py * cone_width,
+        ))
+        cone.lineTo(QPointF(
+            source[0] + nx * cone_length - px * cone_width,
+            source[1] + ny * cone_length - py * cone_width,
+        ))
+        cone.closeSubpath()
+        painter.setBrush(QBrush(QColor(255, 138, 48, int(alpha * 0.60))))
+        painter.setPen(QPen(QColor(255, 238, 174, int(alpha * 0.86)), max(1.2, self.size * 0.035)))
+        painter.drawPath(cone)
+
+        painter.setPen(QPen(
+            QColor(255, 226, 161, int(alpha * 0.72)),
+            max(2.0, self.size * 0.065),
+            Qt.SolidLine,
+            Qt.RoundCap,
+        ))
+        for side in (-1.0, 1.0):
+            painter.drawLine(
+                QPointF(source[0] - nx * recoil + px * side * self.size * 0.18,
+                        source[1] - ny * recoil + py * side * self.size * 0.18),
+                QPointF(source[0] + nx * self.size * 0.10 + px * side * self.size * 0.12,
+                        source[1] + ny * self.size * 0.10 + py * side * self.size * 0.12),
+            )
         painter.restore()
 
     def _draw_heavy_shuriken(self, painter, position, alpha, nx, ny, px, py):
@@ -1395,6 +1621,26 @@ class VFXPreset:
     params: Mapping[str, object] = field(default_factory=dict)
 
 
+CANNONEER_CANNON_BARRAGE_SKILL_ID = "cannon_barrage"
+
+_CANNON_BARRAGE_PARAMS = {
+    "speed": 235.0,
+    "size": 34.0,
+    "lifetime": 1.60,
+    "trail": True,
+    "trail_length": 0.24,
+    "shape": "cannonball",
+    "style": "cannon_combo",
+    "visual_shots": 4,
+    "shot_spacing": 0.18,
+    "shot_travel": 0.86,
+    "recoil_scale": 1.0,
+    "muzzle_flash": True,
+    "color": (255, 145, 70),
+    "seed": 1303,
+}
+
+
 PRESETS = {
     "hero_slash": VFXPreset(
         "hero_slash", "slash",
@@ -1471,10 +1717,14 @@ PRESETS = {
          "detonation_lifetime": 0.30, "detonation": True,
          "color": (244, 146, 255), "seed": 2206, "style": "talisman"},
     ),
+    # ``cannon_barrage`` follows the existing gameplay skill id. The Gallery
+    # currently binds its Cannon slot to ``cannonball_heavy``; keep that
+    # presentation id as a compatibility alias until Gallery work is in scope.
+    CANNONEER_CANNON_BARRAGE_SKILL_ID: VFXPreset(
+        CANNONEER_CANNON_BARRAGE_SKILL_ID, "projectile", dict(_CANNON_BARRAGE_PARAMS),
+    ),
     "cannonball_heavy": VFXPreset(
-        "cannonball_heavy", "projectile",
-        {"speed": 270.0, "size": 29.0, "lifetime": 1.15, "trail": True,
-         "trail_length": 0.18, "shape": "cannonball", "color": (255, 145, 70), "seed": 1303},
+        "cannonball_heavy", "projectile", dict(_CANNON_BARRAGE_PARAMS),
     ),
     "bishop_holy_area": VFXPreset(
         "bishop_holy_area", "area",
@@ -1526,6 +1776,7 @@ def emit_vfx(manager, preset: str | VFXPreset, source, target=None, **overrides)
 
 __all__ = [
     "AreaEffect",
+    "CANNONEER_CANNON_BARRAGE_SKILL_ID",
     "ImpactEffect",
     "LightningEffect",
     "MarkDetonationEffect",

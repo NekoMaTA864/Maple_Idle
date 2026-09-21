@@ -89,6 +89,7 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             "night_lord_dakrus_secret": ProjectileEffect,
             "night_lord_spread_throw": SpreadProjectileEffect,
             "night_lord_detonation_talisman": MarkDetonationEffect,
+            "cannon_barrage": ProjectileEffect,
             "cannonball_heavy": ProjectileEffect,
             "bishop_holy_area": AreaEffect,
         }
@@ -127,6 +128,28 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         self.assertFalse(effect.is_alive)
         self.assertEqual(effect.source, (300.0, 500.0))
         self.assertEqual(effect.target, (150.0, 140.0))
+
+    def test_slash_api_keeps_legacy_defaults_and_supports_phantom_offset(self):
+        legacy = SlashEffect((300, 500), (150, 140))
+        self.assertEqual(legacy.style, "ribbon")
+        self.assertEqual(legacy.offset, (0.0, 0.0))
+
+        phantom = SlashEffect(
+            (300, 500), (150, 140), style="phantom",
+            offset=(-18.0, -6.0), angle=-112.0,
+        )
+        self.assertEqual(phantom.style, "phantom")
+        self.assertEqual(phantom.offset, (-18.0, -6.0))
+
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        painter = QPainter(image)
+        try:
+            phantom.set_progress(0.45)
+            phantom.draw(painter)
+        finally:
+            painter.end()
+        self.assertFalse(painter.isActive())
 
     def test_projectile_moves_from_source_to_target_without_axis_assumption(self):
         effect = ProjectileEffect((320, 80), (40, 260), lifetime=1.0)
@@ -397,6 +420,70 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         state.queue_impact(cannonball, size=50, color=(255, 155, 74), lifetime=0.38)
         state.update_presentation(cannonball.duration + 0.01)
         self.assertTrue(any(isinstance(effect, ImpactEffect) for effect in state.vfx_mgr.effects))
+
+    def test_cannoneer_cannon_barrage_uses_heavy_presentation_language(self):
+        from vfx_prototype import CANNONEER_CANNON_BARRAGE_SKILL_ID
+
+        definition = resolve_preset(CANNONEER_CANNON_BARRAGE_SKILL_ID)
+        gallery_definition = resolve_preset("cannonball_heavy")
+        self.assertEqual(CANNONEER_CANNON_BARRAGE_SKILL_ID, "cannon_barrage")
+        self.assertEqual(definition.effect_type, "projectile")
+        self.assertEqual(definition.params, gallery_definition.params)
+        self.assertEqual(definition.params["shape"], "cannonball")
+        self.assertEqual(definition.params["style"], "cannon_combo")
+        self.assertEqual(definition.params["visual_shots"], 4)
+        self.assertGreater(definition.params["size"], 28.0)
+        self.assertGreater(definition.params["lifetime"], 1.0)
+        self.assertGreater(definition.params["shot_spacing"], 0.0)
+        self.assertTrue(definition.params["muzzle_flash"])
+        self.assertGreater(definition.params["recoil_scale"], 0.0)
+
+        effect = create_effect(CANNONEER_CANNON_BARRAGE_SKILL_ID, (400, 480), (400, 120))
+        self.assertEqual(effect.variant, "normal")
+        self.assertEqual(effect.visual_shots, 4)
+        self.assertEqual(effect.source, (400.0, 480.0))
+        forbidden = ("damage", "cooldown", "hit_count", "buff", "resource", "progression")
+        self.assertFalse(any(hasattr(effect, name) for name in forbidden))
+
+        app = QApplication.instance() or QApplication([])
+        from tools.vfx_gallery import VFXGalleryWindow
+
+        window = VFXGalleryWindow()
+        window.select_class("cannon")
+        self.assertEqual([button.text() for button in window.skill_buttons], ["加農砲連擊"])
+        self.assertEqual(VFXGalleryWindow.PRESET_LABELS["cannon_barrage"], "加農砲連擊")
+        self.assertNotIn("cannonball_heavy", VFXGalleryWindow.PRESET_LABELS)
+
+        window.play_preset("cannon_barrage")
+        gallery_effects = window.state.vfx_mgr.effects
+        self.assertEqual(len(gallery_effects), 1)
+        self.assertEqual(gallery_effects[0].style, "cannon_combo")
+        self.assertEqual(gallery_effects[0].visual_shots, 4)
+
+        # The old Gallery call remains usable, but normalizes to the
+        # canonical skill binding before selecting the presentation branch.
+        window.play_preset("cannonball_heavy")
+        self.assertEqual(window.current_preset, "cannon_barrage")
+        alias_effects = window.state.vfx_mgr.effects
+        self.assertEqual(len(alias_effects), 1)
+        self.assertEqual(alias_effects[0].style, "cannon_combo")
+        window.close()
+
+    def test_cannoneer_cannon_barrage_draws_to_a_qimage_without_global_rng(self):
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        effect = create_effect("cannon_barrage", (400, 480), (400, 120))
+        random.seed(9191)
+        before = random.getstate()
+        painter = QPainter(image)
+        try:
+            for progress in (0.04, 0.24, 0.52, 0.82):
+                effect.set_progress(progress)
+                effect.draw(painter)
+        finally:
+            painter.end()
+        self.assertEqual(before, random.getstate())
+        self.assertFalse(painter.isActive())
 
     def test_debug_anchor_overlay_is_hidden_by_default(self):
         app = QApplication.instance() or QApplication([])

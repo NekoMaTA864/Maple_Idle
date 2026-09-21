@@ -170,7 +170,7 @@ GALLERY_CLASS_REGISTRY = (
         "class_label": "重砲指揮官",
         "avatar_id": "cannon",
         "skills": (
-            {"slot": 1, "skill_id": "cannonball_heavy", "skill_label": "重型加農砲彈", "preset": "cannonball_heavy", "trigger": "play_preset", "source_anchor": "muzzle", "target_anchor": "hit"},
+            {"slot": 1, "skill_id": "cannon_barrage", "skill_label": "加農砲連擊", "preset": "cannon_barrage", "trigger": "play_preset", "source_anchor": "muzzle", "target_anchor": "hit"},
         ),
     },
     {
@@ -247,7 +247,7 @@ class VFXGalleryWindow(QMainWindow):
         ("飛閃起爆符", "night_lord_detonation_talisman"),
         ("舊版英雄斬擊", "hero_slash"),
         ("夜使者手裏劍", "night_lord_shuriken"),
-        ("重型加農砲彈", "cannonball_heavy"),
+        ("加農砲連擊", "cannon_barrage"),
         ("主教神聖領域", "bishop_holy_area"),
     )
     PRESET_BINDINGS = {
@@ -265,7 +265,7 @@ class VFXGalleryWindow(QMainWindow):
         "night_lord_detonation_talisman": ("night_lord", "attack_origin", "hit"),
         "hero_slash": ("hero", "tip", "hit"),
         "night_lord_shuriken": ("night_lord", "attack_origin", "hit"),
-        "cannonball_heavy": ("cannon", "muzzle", "hit"),
+        "cannon_barrage": ("cannon", "muzzle", "hit"),
         "bishop_holy_area": ("bishop", "tip", "ground"),
     }
     # Canonical class-driven Gallery maps.
@@ -274,6 +274,9 @@ class VFXGalleryWindow(QMainWindow):
     PRESET_BINDINGS = GALLERY_PRESET_BINDINGS
     PRESET_CLASS_IDS = GALLERY_PRESET_CLASS_IDS
     PRESET_LABELS = GALLERY_PRESET_LABELS
+    PRESET_ALIASES = {
+        "cannonball_heavy": "cannon_barrage",
+    }
 
 
     def __init__(self):
@@ -368,6 +371,7 @@ class VFXGalleryWindow(QMainWindow):
         raise KeyError(f"Unknown Gallery class: {class_id}")
 
     def _skill_definition(self, preset_name):
+        preset_name = self.PRESET_ALIASES.get(preset_name, preset_name)
         for class_definition in self.CLASS_REGISTRY:
             for skill in _class_skills(class_definition):
                 if skill["preset"] == preset_name:
@@ -417,6 +421,7 @@ class VFXGalleryWindow(QMainWindow):
         return scene.player_position(), scene.enemy_anchor("hit", index=1, total=3)
 
     def play_preset(self, preset_name, variant=None):
+        preset_name = self.PRESET_ALIASES.get(preset_name, preset_name)
         class_definition, skill = self._skill_definition(preset_name)
         if self.current_class_id != class_definition["class_id"]:
             self.select_class(class_definition["class_id"])
@@ -651,7 +656,7 @@ class VFXGalleryWindow(QMainWindow):
             # MarkDetonationEffect owns the mark -> delay -> detonation visual
             # timeline; the gallery does not create a gameplay debuff/timer.
             effects.append(emit_vfx(self.state.vfx_mgr, definition, source, target))
-        elif preset_name == "cannonball_heavy":
+        elif preset_name == "cannon_barrage":
             effect = emit_vfx(self.state.vfx_mgr, definition, source, target)
             effects.append(effect)
             self.state.queue_impact(effect, size=50, color=(255, 155, 74), lifetime=0.38)
