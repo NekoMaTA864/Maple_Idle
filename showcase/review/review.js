@@ -1,15 +1,23 @@
 const DATA_URLS = {
   hero: "../data/hero_review.json",
-  night_lord: "../data/night_lord_review.json"
+  night_lord: "../data/night_lord_review.json",
+  cannoneer: "../data/cannoneer_review.json"
 };
 const STORAGE_KEYS = {
   hero: "mapleIdle.review.hero.v1",
-  night_lord: "mapleIdle.review.night_lord.v1"
+  night_lord: "mapleIdle.review.night_lord.v1",
+  cannoneer: "mapleIdle.review.cannoneer.v1"
 };
 const LEGACY_HERO_STORAGE_KEY = "mapleIdle.heroReview.v1";
 const CLASS_LABELS = {
   hero: "英雄",
-  night_lord: "夜使者"
+  night_lord: "夜使者",
+  cannoneer: "重砲指揮官"
+};
+const CLASS_CONFIG = {
+  hero: { shortLabel: "HERO", typeLabel: "Hero Build" },
+  night_lord: { shortLabel: "NIGHT LORD", typeLabel: "Night Lord Skill", countLabel: "六招" },
+  cannoneer: { shortLabel: "CANNONEER", typeLabel: "Cannoneer Skill", countLabel: "三招" }
 };
 const COPY_FIELDS = ["summary", "visualGoal", "identity", "expectedRhythm"];
 const REVIEW_KEYS = ["overall", "identity", "burst", "sustain", "weight", "notes"];
@@ -142,8 +150,16 @@ function setStatus(message, isWarning = false) {
   statusMessage.classList.toggle("status-warning", isWarning);
 }
 
-function isNightLord() {
-  return state.classId === "night_lord";
+function classConfig() {
+  return CLASS_CONFIG[state.classId] || { shortLabel: state.classId.toUpperCase(), typeLabel: "Skill" };
+}
+
+function isSkillReview() {
+  return state.data?.reviewMode === "skill";
+}
+
+function skillCountLabel() {
+  return classConfig().countLabel || `${entries().length}招`;
 }
 
 function entries() {
@@ -219,11 +235,11 @@ function optionMarkup(selectedId) {
 
 function renderControls() {
   classSelect.value = state.classId;
-  modeSelect.innerHTML = isNightLord()
-    ? `<option value="single">單招檢視</option><option value="compare">六招並排</option><option value="focus">雙招聚焦</option>`
+  modeSelect.innerHTML = isSkillReview()
+    ? `<option value="single">單招檢視</option><option value="compare">${skillCountLabel()}並排</option><option value="focus">雙招聚焦</option>`
     : `<option value="single">單一 Build 檢視</option><option value="compare">並排比較（三套）</option><option value="focus">焦點比較（兩套）</option>`;
   modeSelect.value = state.mode;
-  singleBuildControl.querySelector("span").textContent = isNightLord() ? "檢視技能" : "檢視 Build";
+  singleBuildControl.querySelector("span").textContent = isSkillReview() ? "檢視技能" : "檢視 Build";
   singleBuildSelect.innerHTML = optionMarkup(state.selectedId);
   focusASelect.innerHTML = optionMarkup(state.focusIds[0]);
   focusBSelect.innerHTML = optionMarkup(state.focusIds[1]);
@@ -233,24 +249,27 @@ function renderControls() {
 
 function renderHeader() {
   const label = CLASS_LABELS[state.classId];
-  classEyebrow.textContent = `MAPLEIDLE / ${isNightLord() ? "NIGHT LORD" : "HERO"} REVIEW`;
-  pageTitle.textContent = isNightLord() ? "夜使者技能視覺複核／設計頁" : "Hero Build 視覺複核／設計頁";
-  pageLede.textContent = isNightLord()
-    ? "用六招正式 presentation capture，檢查高速投擲、契約、旋轉、散射、殘影與起爆的差異。"
-    : "用現有 capture 的 PNG／WebM，逐一檢查三套流派的節奏、辨識度、持續感與視覺重量。";
+  const config = classConfig();
+  classEyebrow.textContent = `MAPLEIDLE / ${config.shortLabel} REVIEW`;
+  pageTitle.textContent = state.data?.title || `${label}技能視覺複核／設計頁`;
+  pageLede.textContent = state.data?.lede || (isSkillReview()
+    ? "用正式 presentation capture，檢查技能節奏、辨識度與視覺重量。"
+    : "用現有 capture 的 PNG／WebM，逐一檢查各套流派的節奏、辨識度、持續感與視覺重量。");
   document.title = `${label} VFX 視覺複核／設計頁`;
-  buildsTitle.textContent = isNightLord() ? "夜使者六招預覽" : "Hero Build 預覽";
+  buildsTitle.textContent = state.data?.entryTitle || (isSkillReview()
+    ? `${label}${entries().length}招預覽`
+    : "Hero Build 預覽");
 }
 
 function renderObservations() {
   const observations = state.data.observations || entries();
-  observationTitle.textContent = state.data.comparisonTitle || (isNightLord() ? "六招視覺語彙" : "比較觀察");
-  observationIntro.textContent = state.data.comparisonIntro || (isNightLord()
+  observationTitle.textContent = state.data.comparisonTitle || (isSkillReview() ? "技能視覺語彙" : "比較觀察");
+  observationIntro.textContent = state.data.comparisonIntro || (isSkillReview()
     ? "先看六招的 silhouette、運動方式與節奏，再用本機 Review 欄位核對實際觀感。"
     : "先確認三套 Build 的設計意圖，再用影片與 review 欄位核對實際觀感。");
   observationGrid.innerHTML = observations.map((entry, index) => `
     <article class="observation-card">
-      <span class="observation-label">${isNightLord() ? `技能 0${index + 1}` : `Build ${index + 1}`}</span>
+      <span class="observation-label">${isSkillReview() ? `技能 0${index + 1}` : `Build ${index + 1}`}</span>
       <h3>${escapeHtml(entry.name)}</h3>
       <p><span class="observation-label">設計目標</span>${escapeHtml(copyValue(entry, "visualGoal"))}</p>
       <p><span class="observation-label">應有節奏</span>${escapeHtml(copyValue(entry, "expectedRhythm"))}</p>
@@ -311,6 +330,21 @@ function renderMedia(entry) {
   `;
 }
 
+function renderCaptures(entry) {
+  const captures = entry.preview?.captures || [];
+  if (!captures.length) return "";
+  return `
+    <div class="capture-strip" aria-label="${escapeAttribute(entry.name)} 時間序列 capture">
+      ${captures.map((capture) => `
+        <figure class="capture-frame">
+          <img src="${escapeAttribute(assetUrl(capture.path))}" alt="${escapeAttribute(capture.alt || `${entry.name} ${capture.label || "capture"}`)}">
+          <figcaption>${escapeHtml(capture.label || "capture")}</figcaption>
+        </figure>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderSkillList(entry) {
   const skills = entry.skills?.length ? entry.skills : [{
     slot: "技能",
@@ -340,7 +374,7 @@ function renderCard(entry, index) {
     ["identity", "辨識重點"],
     ["expectedRhythm", "預期節奏"]
   ];
-  const typeLabel = isNightLord() ? "Night Lord Skill" : "Hero Build";
+  const typeLabel = classConfig().typeLabel;
 
   return `
     <article class="build-card" data-build-id="${escapeAttribute(entry.id)}">
@@ -356,6 +390,8 @@ function renderCard(entry, index) {
       <div class="media-shell">
         ${renderMedia(entry)}
       </div>
+
+      ${renderCaptures(entry)}
 
       <div class="card-body">
         <section class="copy-section" aria-label="${escapeAttribute(entry.name)} 文案">
@@ -425,16 +461,16 @@ function renderBuildGrid() {
   if (state.mode === "single") {
     viewSummary.textContent = `目前檢視：${visible[0].name}`;
   } else if (state.mode === "compare") {
-    viewSummary.textContent = isNightLord() ? "六招技能並排檢視" : "三套 Build 並排檢視";
+    viewSummary.textContent = isSkillReview() ? `${skillCountLabel()}技能並排檢視` : "三套 Build 並排檢視";
   } else {
-    viewSummary.textContent = isNightLord() ? "兩招焦點比較" : "兩套 Build 焦點比較";
+    viewSummary.textContent = isSkillReview() ? "兩招焦點比較" : "兩套 Build 焦點比較";
   }
   attachMediaFallbacks();
 }
 
 function renderChecklist() {
-  checklistPanel.hidden = isNightLord();
-  if (isNightLord()) {
+  checklistPanel.hidden = isSkillReview();
+  if (isSkillReview()) {
     checklist.replaceChildren();
     return;
   }
@@ -698,7 +734,7 @@ importFile.addEventListener("change", () => {
 });
 
 const initialParams = new URLSearchParams(window.location.search);
-const initialClass = ["hero", "night_lord"].includes(initialParams.get("class"))
+const initialClass = ["hero", "night_lord", "cannoneer"].includes(initialParams.get("class"))
   ? initialParams.get("class")
   : "hero";
 loadData(initialClass, true);

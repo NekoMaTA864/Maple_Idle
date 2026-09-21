@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "prototype": "Cannoneer",
+  "classId": "cannoneer",
+  "classLabel": "重砲指揮官",
+  "title": "重砲指揮官技能視覺複核",
+  "lede": "用五個正式 presentation capture，檢查重砲重量、夥伴協同與砲台輪射的差異。",
+  "entryTitle": "重砲指揮官三招預覽",
+  "reviewMode": "skill",
+  "comparisonTitle": "三招重砲協同語彙",
+  "comparisonIntro": "先看四發重砲、猴子協同與三座砲台輪射的 silhouette、運動方式與節奏，再用本機 Review 欄位記錄實際觀感。",
+  "observations": [
+    {
+      "id": "cannon-barrage-observation",
+      "name": "加農砲連擊",
+      "visualGoal": "四發大型、慢速、厚重砲擊。",
+      "expectedRhythm": "砲口爆風與後座起手，四發砲彈沿重砲軸線分段推進，最後留下方向性 impact。"
+    },
+    {
+      "id": "monkey-assist-observation",
+      "name": "輔助猴子",
+      "visualGoal": "猴子夥伴、瞄準與協同能量彈。",
+      "expectedRhythm": "夥伴 silhouette 登場，瞄準線與 reticle 鎖定後延遲發射單發協同彈，短促命中收束。"
+    },
+    {
+      "id": "rolling-rainbow-cannon-observation",
+      "name": "滾動彩虹加農砲",
+      "visualGoal": "三座召喚砲台依固定順序彩虹輪射。",
+      "expectedRhythm": "三座砲台登場充能，左／中／右交錯發射固定彩虹閃光，最後以多 lane impact 淡出。"
+    }
+  ],
+  "skills": [
+    {
+      "id": "cannon_barrage",
+      "name": "加農砲連擊",
+      "summary": "以四發大型砲彈完成主力重砲連擊。",
+      "visualGoal": "四發大型、慢速、厚重砲擊，讓砲口、砲彈與後座感成為主要視覺焦點。",
+      "identity": "厚實橘金砲彈、砲口爆風、後座線與分離的四發落點。",
+      "expectedRhythm": "砲口起手 → 四發砲彈依序推進 → 靠近目標時維持 lane 分離 → 重砲 impact 收束。",
+      "preview": {
+        "label": "五段正式 Gallery capture",
+        "poster": "assets/cannoneer/01_cannon_barrage/cannon_barrage_0800ms.png",
+        "alt": "重砲指揮官加農砲連擊 0.8 秒預覽",
+        "captures": [
+          {"label": "0.0s", "path": "assets/cannoneer/01_cannon_barrage/cannon_barrage_0000ms.png", "alt": "加農砲連擊 0.0 秒"},
+          {"label": "0.4s", "path": "assets/cannoneer/01_cannon_barrage/cannon_barrage_0400ms.png", "alt": "加農砲連擊 0.4 秒"},
+          {"label": "0.8s", "path": "assets/cannoneer/01_cannon_barrage/cannon_barrage_0800ms.png", "alt": "加農砲連擊 0.8 秒"},
+          {"label": "1.2s", "path": "assets/cannoneer/01_cannon_barrage/cannon_barrage_1200ms.png", "alt": "加農砲連擊 1.2 秒"},
+          {"label": "1.6s", "path": "assets/cannoneer/01_cannon_barrage/cannon_barrage_1600ms.png", "alt": "加農砲連擊 1.6 秒"}
+        ]
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能 1",
+          "id": "cannon_barrage",
+          "name": "加農砲連擊",
+          "role": "主力重砲連擊",
+          "visualNote": "四發大型砲彈沿重砲軸線推進，保留慢、重、大的職業核心。"
+        }
+      ],
+      "strengths": ["大型砲彈與砲口重量清楚", "晚段落點仍保留四發分離方向"],
+      "concerns": ["避免四發靠近 Boss 後融合成單一球體", "不要加速成高速神射手節奏"]
+    },
+    {
+      "id": "monkey_assist",
+      "name": "輔助猴子",
+      "summary": "猴子夥伴短暫登場並完成一次延遲協同砲擊。",
+      "visualGoal": "猴子夥伴、瞄準與協同能量彈，與單純重砲連擊形成清楚區隔。",
+      "identity": "夥伴 silhouette、瞄準線、Boss reticle 與單發協同能量彈。",
+      "expectedRhythm": "夥伴 entry → 瞄準與鎖定 → 延遲協同發射 → 短促方向性 impact。",
+      "preview": {
+        "label": "五段正式 Gallery capture",
+        "poster": "assets/cannoneer/02_monkey_assist/monkey_assist_0500ms.png",
+        "alt": "重砲指揮官輔助猴子 0.5 秒預覽",
+        "captures": [
+          {"label": "0.0s", "path": "assets/cannoneer/02_monkey_assist/monkey_assist_0000ms.png", "alt": "輔助猴子 0.0 秒"},
+          {"label": "0.28s", "path": "assets/cannoneer/02_monkey_assist/monkey_assist_0280ms.png", "alt": "輔助猴子 0.28 秒"},
+          {"label": "0.5s", "path": "assets/cannoneer/02_monkey_assist/monkey_assist_0500ms.png", "alt": "輔助猴子 0.5 秒"},
+          {"label": "0.8s", "path": "assets/cannoneer/02_monkey_assist/monkey_assist_0800ms.png", "alt": "輔助猴子 0.8 秒"},
+          {"label": "1.2s", "path": "assets/cannoneer/02_monkey_assist/monkey_assist_1200ms.png", "alt": "輔助猴子 1.2 秒"}
+        ]
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能 2",
+          "id": "monkey_assist",
+          "name": "輔助猴子",
+          "role": "夥伴協同攻擊",
+          "visualNote": "猴子 silhouette 先建立夥伴關係，再以瞄準線與單發能量彈完成協同。"
+        }
+      ],
+      "strengths": ["夥伴 silhouette 與協同關係容易辨認", "延遲瞄準節奏不會混入四發重砲連擊"],
+      "concerns": ["猴子不可被 Boss reticle 或砲彈遮住", "協同彈必須保持單發、短促與方向明確"]
+    },
+    {
+      "id": "rolling_rainbow_cannon",
+      "name": "滾動彩虹加農砲",
+      "summary": "三座召喚加農砲依固定順序交錯發射七色彩虹閃光。",
+      "visualGoal": "三座砲台、固定彩虹輪射與連續範圍壓制。",
+      "identity": "左右分離的三座砲台、左／中／右輪射、固定七色 palette 與 lane-based impact。",
+      "expectedRhythm": "三座砲台登場充能 → 左／中／右交錯輪射 → 彩虹閃光沿不同 lane 推進 → 多點 impact 淡出。",
+      "preview": {
+        "label": "五段正式 Gallery capture",
+        "poster": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_1100ms.png",
+        "alt": "重砲指揮官滾動彩虹加農砲 1.1 秒預覽",
+        "captures": [
+          {"label": "0.0s", "path": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_0000ms.png", "alt": "滾動彩虹加農砲 0.0 秒"},
+          {"label": "0.2s", "path": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_0200ms.png", "alt": "滾動彩虹加農砲 0.2 秒"},
+          {"label": "0.56s", "path": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_0560ms.png", "alt": "滾動彩虹加農砲 0.56 秒"},
+          {"label": "1.1s", "path": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_1100ms.png", "alt": "滾動彩虹加農砲 1.1 秒"},
+          {"label": "1.8s", "path": "assets/cannoneer/03_rolling_rainbow_cannon/rolling_rainbow_cannon_1800ms.png", "alt": "滾動彩虹加農砲 1.8 秒"}
+        ]
+      },
+      "video": "",
+      "skills": [
+        {
+          "slot": "技能 3",
+          "id": "rolling_rainbow_cannon",
+          "name": "滾動彩虹加農砲",
+          "role": "砲台輪射壓制",
+          "visualNote": "三座砲台固定分布並交錯發射彩虹閃光，形成連續範圍壓制。"
+        }
+      ],
+      "strengths": ["三座砲台 silhouette 與輪射節奏清楚", "固定彩虹序列與不同 target lane 提供範圍壓制感"],
+      "concerns": ["不可退化成單一中央光柱或巨大彩虹板", "砲台 silhouette 應始終與猴子協同彈及四發砲彈分離"]
+    }
+  ]
+}

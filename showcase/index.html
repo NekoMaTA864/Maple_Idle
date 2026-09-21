@@ -50,6 +50,18 @@
         <div id="night-lord-skill-grid" class="skill-entry-grid" aria-live="polite"></div>
       </section>
 
+      <section class="night-lord-entry" aria-labelledby="cannoneer-heading">
+        <div class="showcase-intro">
+          <div>
+            <p class="section-kicker">COMBAT AVATAR / CANNONEER</p>
+            <h2 id="cannoneer-heading">重砲指揮官三招視覺複核</h2>
+          </div>
+          <a class="review-link" href="./review/?class=cannoneer">開啟重砲指揮官單招／三招比較 →</a>
+        </div>
+        <p id="cannoneer-load-state" class="load-state" role="status">Loading Cannoneer skill data…</p>
+        <div id="cannoneer-skill-grid" class="skill-entry-grid" aria-live="polite"></div>
+      </section>
+
       <footer class="site-footer">
         <span>STATIC SHOWCASE</span>
         <span>NO COMBAT LOGIC / NO EXTERNAL ASSETS</span>
@@ -62,6 +74,8 @@
       const loadState = document.querySelector("#load-state");
       const nightLordGrid = document.querySelector("#night-lord-skill-grid");
       const nightLordLoadState = document.querySelector("#night-lord-load-state");
+      const cannoneerGrid = document.querySelector("#cannoneer-skill-grid");
+      const cannoneerLoadState = document.querySelector("#cannoneer-load-state");
 
       function escapeHtml(value) {
         return String(value)
@@ -160,11 +174,11 @@
         }
       }
 
-      function nightLordCard(skill, index) {
+      function skillEntryCard(skill, index, classId, classLabel) {
         const preview = skill.preview || {};
         const poster = showcaseAsset(preview.poster || "");
-        const titleId = `night-lord-title-${index}`;
-        const reviewUrl = `./review/?class=night_lord&mode=single&build=${encodeURIComponent(skill.id)}`;
+        const titleId = `${classId}-title-${index}`;
+        const reviewUrl = `./review/?class=${classId}&mode=single&build=${encodeURIComponent(skill.id)}`;
         const card = document.createElement("article");
         card.className = "skill-entry-card";
         card.innerHTML = `
@@ -173,7 +187,7 @@
               ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(preview.alt || skill.name)}">` : ""}
             </div>
             <div class="skill-entry-body">
-              <span class="card-kicker">NIGHT LORD / SKILL 0${index + 1}</span>
+              <span class="card-kicker">${escapeHtml(classLabel)} / SKILL 0${index + 1}</span>
               <h3 id="${titleId}">${escapeHtml(skill.name)}</h3>
               <p>${escapeHtml(skill.visualGoal)}</p>
             </div>
@@ -182,24 +196,37 @@
         return card;
       }
 
-      async function loadNightLordReview() {
+      async function loadSkillReview({ classId, classLabel, dataUrl, grid, loadState }) {
         try {
-          const response = await fetch("./data/night_lord_review.json", { cache: "no-store" });
+          const response = await fetch(dataUrl, { cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const data = await response.json();
-          if (!Array.isArray(data.skills) || data.skills.length !== 6) throw new Error("Invalid Night Lord skill data");
-          nightLordGrid.replaceChildren(...data.skills.map(nightLordCard));
-          nightLordLoadState.textContent = `${data.skills.length} Night Lord skills / presentation data loaded`;
-          nightLordLoadState.classList.add("is-loaded");
+          if (!Array.isArray(data.skills) || !data.skills.length) throw new Error(`Invalid ${classLabel} skill data`);
+          grid.replaceChildren(...data.skills.map((skill, index) => skillEntryCard(skill, index, classId, classLabel)));
+          loadState.textContent = `${data.skills.length} ${classLabel} skills / presentation data loaded`;
+          loadState.classList.add("is-loaded");
         } catch (error) {
-          nightLordLoadState.textContent = "Night Lord skill data could not be loaded.";
-          nightLordLoadState.classList.add("is-error");
-          console.error("Night Lord showcase data load failed", error);
+          loadState.textContent = `${classLabel} skill data could not be loaded.`;
+          loadState.classList.add("is-error");
+          console.error(`${classLabel} showcase data load failed`, error);
         }
       }
 
       loadBuilds();
-      loadNightLordReview();
+      loadSkillReview({
+        classId: "night_lord",
+        classLabel: "NIGHT LORD",
+        dataUrl: "./data/night_lord_review.json",
+        grid: nightLordGrid,
+        loadState: nightLordLoadState
+      });
+      loadSkillReview({
+        classId: "cannoneer",
+        classLabel: "CANNONEER",
+        dataUrl: "./data/cannoneer_review.json",
+        grid: cannoneerGrid,
+        loadState: cannoneerLoadState
+      });
     </script>
   </body>
 </html>
