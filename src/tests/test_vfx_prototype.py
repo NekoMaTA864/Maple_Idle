@@ -91,6 +91,7 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             "night_lord_detonation_talisman": MarkDetonationEffect,
             "cannon_barrage": ProjectileEffect,
             "cannonball_heavy": ProjectileEffect,
+            "monkey_assist": ProjectileEffect,
             "bishop_holy_area": AreaEffect,
         }
         for name, effect_type in expected.items():
@@ -470,7 +471,10 @@ class TestVerticalVFXPrototype(unittest.TestCase):
 
         window = VFXGalleryWindow()
         window.select_class("cannon")
-        self.assertEqual([button.text() for button in window.skill_buttons], ["加農砲連擊"])
+        self.assertEqual(
+            [button.text() for button in window.skill_buttons],
+            ["加農砲連擊", "輔助猴子"],
+        )
         self.assertEqual(VFXGalleryWindow.PRESET_LABELS["cannon_barrage"], "加農砲連擊")
         self.assertNotIn("cannonball_heavy", VFXGalleryWindow.PRESET_LABELS)
 
@@ -487,6 +491,113 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         alias_effects = window.state.vfx_mgr.effects
         self.assertEqual(len(alias_effects), 1)
         self.assertEqual(alias_effects[0].style, "cannon_combo")
+        window.close()
+
+    def test_cannoneer_monkey_assist_has_deterministic_companion_attack_lifecycle(self):
+        from vfx_prototype import CANNONEER_MONKEY_ASSIST_SKILL_ID
+
+        definition = resolve_preset(CANNONEER_MONKEY_ASSIST_SKILL_ID)
+        self.assertEqual(CANNONEER_MONKEY_ASSIST_SKILL_ID, "monkey_assist")
+        self.assertEqual(definition.effect_type, "projectile")
+        self.assertEqual(definition.params["style"], "monkey_assist")
+        self.assertEqual(definition.params["shape"], "assist_orb")
+        self.assertGreater(definition.params["assist_delay"], 0.0)
+        self.assertGreater(definition.params["assist_travel"], 0.0)
+        self.assertGreater(definition.params["lifetime"], 1.20)
+        self.assertGreater(definition.params["assist_impact_window"], 0.0)
+
+        effect = create_effect(
+            CANNONEER_MONKEY_ASSIST_SKILL_ID, (400, 480), (400, 120),
+        )
+        self.assertIsInstance(effect, ProjectileEffect)
+        self.assertTrue(effect.is_alive)
+        self.assertGreater(effect.monkey_assist_alpha(0.0), 0)
+        self.assertTrue(effect.is_alive)
+        self.assertAlmostEqual(effect.assist_shot_phase(0.28), 0.0, places=6)
+        self.assertIsNone(effect.assist_shot_position(0.20))
+
+        effect.update(0.40)
+        self.assertTrue(effect.is_alive)
+        shot_position = effect.assist_shot_position()
+        self.assertIsNotNone(shot_position)
+        self.assertNotEqual(shot_position, effect.target)
+        self.assertIsNotNone(effect.assist_shot_position(0.50))
+        self.assertIsNotNone(effect.assist_shot_position(0.80))
+        self.assertGreater(effect.monkey_assist_alpha(1.20), 0)
+        self.assertGreater(effect.monkey_assist_impact_fade(1.20), 0.0)
+        effect.set_progress(1.20 / effect.duration)
+        self.assertTrue(effect.is_alive)
+
+        first = create_effect("monkey_assist", (400, 480), (400, 120))
+        second = create_effect("monkey_assist", (400, 480), (400, 120))
+        for elapsed in (0.0, 0.20, 0.40, 0.90, 1.10):
+            first.set_progress(elapsed / first.duration)
+            second.set_progress(elapsed / second.duration)
+            self.assertEqual(first.companion_position(), second.companion_position())
+            self.assertEqual(first.assist_shot_position(), second.assist_shot_position())
+
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        random.seed(1304)
+        before = random.getstate()
+        painter = QPainter(image)
+        try:
+            for elapsed in (0.12, 0.40, 0.90, 1.10):
+                effect.set_progress(elapsed / effect.duration)
+                effect.draw(painter)
+        finally:
+            painter.end()
+        self.assertEqual(before, random.getstate())
+        effect.update(effect.duration)
+        self.assertFalse(effect.is_alive)
+
+    def test_gallery_binds_monkey_assist_and_preserves_cannon_alias(self):
+        from tools.vfx_gallery import (
+            GALLERY_CLASS_REGISTRY,
+            GALLERY_PRESET_BINDINGS,
+            GALLERY_PRESET_ORDER,
+            VFXGalleryWindow,
+        )
+
+        cannon_definition = next(
+            definition for definition in GALLERY_CLASS_REGISTRY
+            if definition["class_id"] == "cannon"
+        )
+        monkey_skill = next(
+            skill for skill in cannon_definition["skills"]
+            if skill["skill_id"] == "monkey_assist"
+        )
+        self.assertEqual(monkey_skill["preset"], "monkey_assist")
+        self.assertEqual(monkey_skill["skill_label"], "輔助猴子")
+        self.assertEqual(monkey_skill["source_anchor"], "attack_origin")
+        self.assertEqual(monkey_skill["target_anchor"], "hit")
+        self.assertIn(("輔助猴子", "monkey_assist"), GALLERY_PRESET_ORDER)
+        self.assertEqual(
+            GALLERY_PRESET_BINDINGS["monkey_assist"],
+            ("cannon", "attack_origin", "hit"),
+        )
+
+        app = QApplication.instance() or QApplication([])
+        window = VFXGalleryWindow()
+        window.select_class("cannon")
+        self.assertEqual(
+            [button.text() for button in window.skill_buttons],
+            ["加農砲連擊", "輔助猴子"],
+        )
+
+        window.play_preset("monkey_assist")
+        self.assertEqual(window.current_preset, "monkey_assist")
+        self.assertEqual(len(window.state.vfx_mgr.effects), 1)
+        self.assertEqual(window.state.vfx_mgr.effects[0].style, "monkey_assist")
+
+        window.play_preset("cannon_barrage")
+        self.assertEqual(window.current_preset, "cannon_barrage")
+        self.assertEqual(window.state.vfx_mgr.effects[0].style, "cannon_combo")
+        self.assertEqual(window.state.vfx_mgr.effects[0].visual_shots, 4)
+
+        window.play_preset("cannonball_heavy")
+        self.assertEqual(window.current_preset, "cannon_barrage")
+        self.assertEqual(window.state.vfx_mgr.effects[0].style, "cannon_combo")
         window.close()
 
     def test_cannoneer_cannon_barrage_draws_to_a_qimage_without_global_rng(self):

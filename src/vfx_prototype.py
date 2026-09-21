@@ -298,7 +298,9 @@ class ProjectileEffect(PrototypeEffect):
                  alpha_scale=1.0, spin_rate=980.0, wind_streaks=0,
                  trail_width_scale=None, style="default", visual_shots=1,
                  shot_spacing=0.0, shot_travel=0.80, recoil_scale=0.0,
-                 muzzle_flash=False, landing_spread=0.0):
+                 muzzle_flash=False, landing_spread=0.0, assist_delay=0.0,
+                 assist_travel=0.62, companion_offset=(0.0, 0.0),
+                 assist_impact_window=0.72):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -333,6 +335,10 @@ class ProjectileEffect(PrototypeEffect):
         self.recoil_scale = max(0.0, float(recoil_scale))
         self.muzzle_flash = bool(muzzle_flash)
         self.landing_spread = max(0.0, float(landing_spread))
+        self.assist_delay = max(0.0, float(assist_delay))
+        self.assist_travel = max(0.08, float(assist_travel))
+        self.companion_offset = _point(companion_offset)
+        self.assist_impact_window = max(0.08, float(assist_impact_window))
 
     @property
     def position(self) -> Point:
@@ -349,6 +355,9 @@ class ProjectileEffect(PrototypeEffect):
 
     def draw(self, painter) -> None:
         if not self.has_started:
+            return
+        if self.style == "monkey_assist":
+            self._draw_monkey_assist(painter)
             return
         position = self.position
         alpha = int(255 * (1.0 - self.progress) * self.alpha_scale)
@@ -414,6 +423,204 @@ class ProjectileEffect(PrototypeEffect):
         painter.setBrush(QBrush(QColor(255, 255, 255, alpha)))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(QPointF(*position), self.size * 0.30, self.size * 0.30)
+        painter.restore()
+
+    def assist_shot_phase(self, elapsed=None):
+        """Return the deterministic assist-shot phase for presentation use."""
+        if elapsed is None:
+            elapsed = self.duration * self.progress
+        return (max(0.0, float(elapsed)) - self.assist_delay) / self.assist_travel
+
+    def companion_position(self, elapsed=None):
+        """Return the deterministic companion pose near the firing anchor."""
+        if elapsed is None:
+            elapsed = self.duration * self.progress
+        elapsed = max(0.0, float(elapsed))
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / distance, dy / distance
+        shot_phase = self.assist_shot_phase(elapsed)
+        recoil = 0.0
+        if 0.0 <= shot_phase < 0.24:
+            recoil = self.size * 0.18 * (1.0 - shot_phase / 0.24)
+        bob = math.sin(elapsed * 7.0) * self.size * 0.06
+        return (
+            self.source[0] + self.companion_offset[0] - nx * recoil,
+            self.source[1] + self.companion_offset[1] + bob - ny * recoil,
+        )
+
+    def assist_shot_position(self, elapsed=None):
+        """Return the companion's assist projectile position, if launched."""
+        phase = self.assist_shot_phase(elapsed)
+        if phase <= 0.0:
+            return None
+        ratio = 1.0 - (1.0 - min(1.0, phase)) ** 1.05
+        origin = self.companion_position(self.assist_delay)
+        return _lerp(origin, self.target, ratio)
+
+    def monkey_assist_alpha(self, elapsed=None):
+        """Return the visible alpha, including explicit entry/exit boundary states."""
+        if elapsed is None:
+            elapsed = self.duration * self.progress
+        elapsed = max(0.0, float(elapsed))
+        entry_fade = 0.24 + 0.76 * min(1.0, elapsed / 0.16)
+        exit_fade = min(1.0, max(0.0, (self.duration - elapsed) / 0.24))
+        return int(238 * self.alpha_scale * min(entry_fade, exit_fade))
+
+    def monkey_assist_impact_fade(self, elapsed=None):
+        """Return the short deterministic impact fade after the assist shot."""
+        phase = self.assist_shot_phase(elapsed)
+        if phase <= 1.0:
+            return 0.0
+        return max(0.0, 1.0 - (phase - 1.0) / self.assist_impact_window)
+
+    def _draw_monkey_assist(self, painter):
+        elapsed = self.duration * self.progress
+        phase = self.assist_shot_phase(elapsed)
+        alpha = self.monkey_assist_alpha(elapsed)
+        if alpha <= 0:
+            return
+
+        companion = self.companion_position(elapsed)
+        if phase <= 0.0:
+            dx = self.target[0] - companion[0]
+            dy = self.target[1] - companion[1]
+            distance = max(1.0, math.hypot(dx, dy))
+            sight_end = (
+                companion[0] + dx / distance * distance * 0.72,
+                companion[1] + dy / distance * distance * 0.72,
+            )
+            painter.save()
+            painter.setPen(QPen(
+                QColor(255, 220, 128, int(alpha * 0.52)),
+                max(1.0, self.size * 0.045),
+                Qt.DashLine,
+            ))
+            painter.drawLine(QPointF(*companion), QPointF(*sight_end))
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(
+                QColor(255, 236, 172, int(alpha * 0.72)),
+                max(1.0, self.size * 0.055),
+            ))
+            painter.drawEllipse(
+                QPointF(*self.target), self.size * 0.34, self.size * 0.24,
+            )
+            painter.restore()
+
+        self._draw_monkey_companion(painter, companion, alpha, phase)
+
+        if 0.0 < phase <= 1.0:
+            shot_position = self.assist_shot_position(elapsed)
+            origin = self.companion_position(self.assist_delay)
+            shot_ratio = 1.0 - (1.0 - phase) ** 1.05
+            trail_start = _lerp(origin, shot_position, max(0.0, shot_ratio - 0.24))
+            _draw_bloom_line(
+                painter,
+                trail_start,
+                shot_position,
+                max(1.8, self.size * 0.12),
+                self.color,
+                int(alpha * 0.76),
+                core_white=True,
+            )
+            painter.save()
+            orb_radius = self.size * 0.22
+            glow = QRadialGradient(
+                QPointF(*shot_position), orb_radius * 2.5,
+            )
+            glow.setColorAt(0.0, QColor(255, 250, 206, alpha))
+            glow.setColorAt(0.45, _color(self.color, int(alpha * 0.86)))
+            glow.setColorAt(1.0, _color(self.color, 0))
+            painter.setBrush(QBrush(glow))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(QPointF(*shot_position), orb_radius * 1.8, orb_radius * 1.8)
+            painter.setBrush(QColor(255, 245, 190, alpha))
+            painter.setPen(QPen(QColor(255, 214, 120, alpha), max(1.0, self.size * 0.045)))
+            painter.drawEllipse(QPointF(*shot_position), orb_radius, orb_radius * 0.72)
+            painter.restore()
+        elif phase > 1.0:
+            impact_fade = self.monkey_assist_impact_fade(elapsed)
+            if impact_fade > 0.0:
+                self._draw_monkey_assist_impact(painter, alpha, impact_fade)
+
+    def _draw_monkey_companion(self, painter, position, alpha, phase):
+        x, y = position
+        painter.save()
+
+        glow = QRadialGradient(QPointF(x, y), self.size * 1.35)
+        glow.setColorAt(0.0, QColor(255, 204, 112, int(alpha * 0.28)))
+        glow.setColorAt(1.0, QColor(255, 145, 70, 0))
+        painter.setBrush(QBrush(glow))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(QPointF(x, y), self.size * 1.15, self.size * 0.82)
+
+        body_color = QColor(99, 62, 46, alpha)
+        outline = QColor(255, 210, 132, int(alpha * 0.92))
+        painter.setBrush(QBrush(body_color))
+        painter.setPen(QPen(outline, max(1.0, self.size * 0.055)))
+        painter.drawEllipse(QPointF(x, y + self.size * 0.24), self.size * 0.34, self.size * 0.42)
+        painter.drawEllipse(QPointF(x, y - self.size * 0.28), self.size * 0.29, self.size * 0.27)
+        painter.drawEllipse(QPointF(x - self.size * 0.28, y - self.size * 0.36), self.size * 0.12, self.size * 0.15)
+        painter.drawEllipse(QPointF(x + self.size * 0.28, y - self.size * 0.36), self.size * 0.12, self.size * 0.15)
+
+        painter.setPen(QPen(outline, max(1.0, self.size * 0.07), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(
+            QPointF(x - self.size * 0.20, y + self.size * 0.12),
+            QPointF(x - self.size * 0.58, y - self.size * 0.02),
+        )
+        painter.drawLine(
+            QPointF(x + self.size * 0.20, y + self.size * 0.12),
+            QPointF(x + self.size * 0.52, y - self.size * 0.06),
+        )
+        painter.drawLine(
+            QPointF(x - self.size * 0.16, y + self.size * 0.56),
+            QPointF(x - self.size * 0.34, y + self.size * 0.80),
+        )
+        painter.drawLine(
+            QPointF(x + self.size * 0.16, y + self.size * 0.56),
+            QPointF(x + self.size * 0.34, y + self.size * 0.80),
+        )
+
+        tail = QPainterPath(QPointF(x + self.size * 0.27, y + self.size * 0.34))
+        tail.cubicTo(
+            x + self.size * 0.76, y + self.size * 0.52,
+            x + self.size * 0.86, y - self.size * 0.14,
+            x + self.size * 0.50, y - self.size * 0.30,
+        )
+        painter.setPen(QPen(outline, max(1.0, self.size * 0.075), Qt.SolidLine, Qt.RoundCap))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPath(tail)
+
+        eye_color = QColor(255, 246, 190, int(alpha * (0.72 + 0.28 * min(1.0, max(0.0, phase + 0.2)))))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(eye_color))
+        painter.drawEllipse(QPointF(x - self.size * 0.10, y - self.size * 0.31), self.size * 0.035, self.size * 0.035)
+        painter.drawEllipse(QPointF(x + self.size * 0.10, y - self.size * 0.31), self.size * 0.035, self.size * 0.035)
+        painter.restore()
+
+    def _draw_monkey_assist_impact(self, painter, alpha, fade):
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / distance, dy / distance
+        px, py = -ny, nx
+        radius = self.size * (0.42 + 0.28 * (1.0 - fade))
+        impact_alpha = int(alpha * fade * 0.78)
+        painter.save()
+        painter.setPen(QPen(
+            QColor(255, 219, 133, impact_alpha),
+            max(1.2, self.size * 0.06 * fade),
+            Qt.SolidLine,
+            Qt.RoundCap,
+        ))
+        for side in (-1.0, 1.0):
+            painter.drawLine(
+                QPointF(self.target[0] - nx * radius + px * side * self.size * 0.24,
+                        self.target[1] - ny * radius + py * side * self.size * 0.24),
+                QPointF(self.target[0] + nx * radius * 0.82 + px * side * self.size * 0.42,
+                        self.target[1] + ny * radius * 0.82 + py * side * self.size * 0.42),
+            )
         painter.restore()
 
     def _draw_cannon_combo(self, painter):
@@ -1650,6 +1857,7 @@ class VFXPreset:
 
 
 CANNONEER_CANNON_BARRAGE_SKILL_ID = "cannon_barrage"
+CANNONEER_MONKEY_ASSIST_SKILL_ID = "monkey_assist"
 
 _CANNON_BARRAGE_PARAMS = {
     "speed": 235.0,
@@ -1667,6 +1875,22 @@ _CANNON_BARRAGE_PARAMS = {
     "muzzle_flash": True,
     "color": (255, 145, 70),
     "seed": 1303,
+}
+
+_MONKEY_ASSIST_PARAMS = {
+    "speed": 300.0,
+    "size": 24.0,
+        "lifetime": 1.30,
+    "trail": True,
+    "trail_length": 0.12,
+    "shape": "assist_orb",
+    "style": "monkey_assist",
+        "assist_delay": 0.28,
+        "assist_travel": 0.62,
+        "assist_impact_window": 0.72,
+    "companion_offset": (-52.0, -26.0),
+    "color": (255, 166, 72),
+    "seed": 1304,
 }
 
 
@@ -1755,6 +1979,9 @@ PRESETS = {
     "cannonball_heavy": VFXPreset(
         "cannonball_heavy", "projectile", dict(_CANNON_BARRAGE_PARAMS),
     ),
+    CANNONEER_MONKEY_ASSIST_SKILL_ID: VFXPreset(
+        CANNONEER_MONKEY_ASSIST_SKILL_ID, "projectile", dict(_MONKEY_ASSIST_PARAMS),
+    ),
     "bishop_holy_area": VFXPreset(
         "bishop_holy_area", "area",
         {"width": 190.0, "height": 72.0, "lifetime": 1.80, "pulse": True, "fade": True,
@@ -1806,6 +2033,7 @@ def emit_vfx(manager, preset: str | VFXPreset, source, target=None, **overrides)
 __all__ = [
     "AreaEffect",
     "CANNONEER_CANNON_BARRAGE_SKILL_ID",
+    "CANNONEER_MONKEY_ASSIST_SKILL_ID",
     "ImpactEffect",
     "LightningEffect",
     "MarkDetonationEffect",

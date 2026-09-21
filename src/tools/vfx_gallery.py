@@ -171,6 +171,7 @@ GALLERY_CLASS_REGISTRY = (
         "avatar_id": "cannon",
         "skills": (
             {"slot": 1, "skill_id": "cannon_barrage", "skill_label": "加農砲連擊", "preset": "cannon_barrage", "trigger": "play_preset", "source_anchor": "muzzle", "target_anchor": "hit"},
+            {"slot": 2, "skill_id": "monkey_assist", "skill_label": "輔助猴子", "preset": "monkey_assist", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
         ),
     },
     {
