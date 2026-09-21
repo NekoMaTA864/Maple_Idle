@@ -92,6 +92,7 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             "cannon_barrage": ProjectileEffect,
             "cannonball_heavy": ProjectileEffect,
             "monkey_assist": ProjectileEffect,
+            "rolling_rainbow_cannon": ProjectileEffect,
             "bishop_holy_area": AreaEffect,
         }
         for name, effect_type in expected.items():
@@ -473,7 +474,7 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         window.select_class("cannon")
         self.assertEqual(
             [button.text() for button in window.skill_buttons],
-            ["加農砲連擊", "輔助猴子"],
+            ["加農砲連擊", "輔助猴子", "滾動彩虹加農砲"],
         )
         self.assertEqual(VFXGalleryWindow.PRESET_LABELS["cannon_barrage"], "加農砲連擊")
         self.assertNotIn("cannonball_heavy", VFXGalleryWindow.PRESET_LABELS)
@@ -551,6 +552,89 @@ class TestVerticalVFXPrototype(unittest.TestCase):
         effect.update(effect.duration)
         self.assertFalse(effect.is_alive)
 
+    def test_cannoneer_rolling_rainbow_cannon_has_sequential_fixed_color_waves(self):
+        from vfx_prototype import CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID
+
+        definition = resolve_preset(CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID)
+        self.assertEqual(CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID, "rolling_rainbow_cannon")
+        self.assertEqual(definition.effect_type, "projectile")
+        self.assertEqual(definition.params["style"], "rolling_rainbow_cannon")
+        self.assertEqual(definition.params["shape"], "rainbow_flash")
+        self.assertGreater(definition.params["visual_waves"], 4)
+        self.assertGreater(definition.params["wave_spacing"], 0.0)
+        self.assertGreater(definition.params["wave_travel"], 0.0)
+        self.assertGreater(definition.params["sweep_width"], 0.0)
+        self.assertEqual(definition.params["emitter_offsets"], (-1.0, 0.0, 1.0))
+        self.assertEqual(
+            definition.params["firing_order"],
+            (0, 1, 2, 1, 0, 1, 2, 1, 0),
+        )
+        self.assertEqual(len(definition.params["rainbow_colors"]), 7)
+        self.assertEqual(len(set(definition.params["rainbow_colors"])), 7)
+
+        effect = create_effect(
+            CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID, (400, 480), (400, 120),
+        )
+        self.assertIsInstance(effect, ProjectileEffect)
+        self.assertTrue(effect.is_alive)
+        self.assertEqual(effect.visual_waves, 9)
+        emitter_positions = effect.rolling_rainbow_emitter_positions()
+        self.assertEqual(len(emitter_positions), 3)
+        self.assertEqual(
+            len({round(position[0], 5) for position in emitter_positions}),
+            3,
+        )
+        self.assertEqual(
+            len({round(position[1], 5) for position in emitter_positions}),
+            1,
+        )
+        self.assertEqual(
+            effect.firing_order,
+            (0, 1, 2, 1, 0, 1, 2, 1, 0),
+        )
+        self.assertEqual(
+            [effect.rolling_rainbow_wave_emitter_index(index) for index in range(9)],
+            [0, 1, 2, 1, 0, 1, 2, 1, 0],
+        )
+        target_points = [effect.rolling_rainbow_target_point(index) for index in range(3)]
+        self.assertEqual(len({round(point[0], 5) for point in target_points}), 3)
+        self.assertEqual(
+            [effect.rolling_rainbow_wave_color(index) for index in range(7)],
+            list(definition.params["rainbow_colors"]),
+        )
+
+        phases = [
+            effect.rolling_rainbow_wave_phase(index, elapsed=0.72)
+            for index in range(effect.visual_waves)
+        ]
+        self.assertGreater(phases[0], 1.0)
+        self.assertTrue(0.0 < phases[3] < 1.0)
+        self.assertLess(phases[-1], 0.0)
+
+        second = create_effect(
+            CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID, (400, 480), (400, 120),
+        )
+        self.assertEqual(effect.rainbow_colors, second.rainbow_colors)
+        self.assertEqual(phases, [
+            second.rolling_rainbow_wave_phase(index, elapsed=0.72)
+            for index in range(second.visual_waves)
+        ])
+
+        image = QImage(800, 600, QImage.Format_ARGB32)
+        image.fill(0)
+        random.seed(1305)
+        before = random.getstate()
+        painter = QPainter(image)
+        try:
+            for elapsed in (0.0, 0.22, 0.58, 1.06, 1.72):
+                effect.set_progress(elapsed / effect.duration)
+                effect.draw(painter)
+        finally:
+            painter.end()
+        self.assertEqual(before, random.getstate())
+        effect.update(effect.duration)
+        self.assertFalse(effect.is_alive)
+
     def test_gallery_binds_monkey_assist_and_preserves_cannon_alias(self):
         from tools.vfx_gallery import (
             GALLERY_CLASS_REGISTRY,
@@ -567,6 +651,10 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             skill for skill in cannon_definition["skills"]
             if skill["skill_id"] == "monkey_assist"
         )
+        rolling_skill = next(
+            skill for skill in cannon_definition["skills"]
+            if skill["skill_id"] == "rolling_rainbow_cannon"
+        )
         self.assertEqual(monkey_skill["preset"], "monkey_assist")
         self.assertEqual(monkey_skill["skill_label"], "輔助猴子")
         self.assertEqual(monkey_skill["source_anchor"], "attack_origin")
@@ -576,19 +664,42 @@ class TestVerticalVFXPrototype(unittest.TestCase):
             GALLERY_PRESET_BINDINGS["monkey_assist"],
             ("cannon", "attack_origin", "hit"),
         )
+        self.assertEqual(rolling_skill["slot"], 3)
+        self.assertEqual(rolling_skill["skill_id"], "rolling_rainbow_cannon")
+        self.assertEqual(rolling_skill["skill_label"], "滾動彩虹加農砲")
+        self.assertEqual(rolling_skill["preset"], "rolling_rainbow_cannon")
+        self.assertEqual(rolling_skill["trigger"], "play_preset")
+        self.assertEqual(rolling_skill["source_anchor"], "attack_origin")
+        self.assertEqual(rolling_skill["target_anchor"], "hit")
+        self.assertIn(("滾動彩虹加農砲", "rolling_rainbow_cannon"), GALLERY_PRESET_ORDER)
+        self.assertEqual(
+            GALLERY_PRESET_BINDINGS["rolling_rainbow_cannon"],
+            ("cannon", "attack_origin", "hit"),
+        )
+        self.assertEqual(VFXGalleryWindow.PRESET_ORDER, GALLERY_PRESET_ORDER)
+        self.assertEqual(VFXGalleryWindow.PRESET_BINDINGS, GALLERY_PRESET_BINDINGS)
 
         app = QApplication.instance() or QApplication([])
         window = VFXGalleryWindow()
         window.select_class("cannon")
         self.assertEqual(
             [button.text() for button in window.skill_buttons],
-            ["加農砲連擊", "輔助猴子"],
+            ["加農砲連擊", "輔助猴子", "滾動彩虹加農砲"],
         )
 
         window.play_preset("monkey_assist")
         self.assertEqual(window.current_preset, "monkey_assist")
         self.assertEqual(len(window.state.vfx_mgr.effects), 1)
         self.assertEqual(window.state.vfx_mgr.effects[0].style, "monkey_assist")
+
+        window.play_preset("rolling_rainbow_cannon")
+        self.assertEqual(window.current_preset, "rolling_rainbow_cannon")
+        self.assertEqual(len(window.state.vfx_mgr.effects), 1)
+        rolling_effect = window.state.vfx_mgr.effects[0]
+        self.assertEqual(rolling_effect.style, "rolling_rainbow_cannon")
+        self.assertEqual(rolling_effect.visual_waves, 9)
+        self.assertEqual(len(rolling_effect.rolling_rainbow_emitter_positions()), 3)
+        self.assertEqual(len(rolling_effect.rainbow_colors), 7)
 
         window.play_preset("cannon_barrage")
         self.assertEqual(window.current_preset, "cannon_barrage")

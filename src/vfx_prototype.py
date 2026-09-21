@@ -300,7 +300,10 @@ class ProjectileEffect(PrototypeEffect):
                  shot_spacing=0.0, shot_travel=0.80, recoil_scale=0.0,
                  muzzle_flash=False, landing_spread=0.0, assist_delay=0.0,
                  assist_travel=0.62, companion_offset=(0.0, 0.0),
-                 assist_impact_window=0.72):
+                 assist_impact_window=0.72, visual_waves=1,
+                 wave_spacing=0.0, wave_travel=0.80, sweep_width=0.0,
+                 rainbow_colors=(), emitter_spread=0.0,
+                 emitter_offsets=(), firing_order=()):
         source_point = _point(source)
         target_point = _point(target)
         distance = math.hypot(target_point[0] - source_point[0], target_point[1] - source_point[1])
@@ -339,6 +342,21 @@ class ProjectileEffect(PrototypeEffect):
         self.assist_travel = max(0.08, float(assist_travel))
         self.companion_offset = _point(companion_offset)
         self.assist_impact_window = max(0.08, float(assist_impact_window))
+        self.visual_waves = max(1, int(visual_waves))
+        self.wave_spacing = max(0.0, float(wave_spacing))
+        self.wave_travel = max(0.08, float(wave_travel))
+        self.sweep_width = max(0.0, float(sweep_width))
+        self.rainbow_colors = tuple(
+            _clamp_color(wave_color) for wave_color in rainbow_colors
+        )
+        self.emitter_spread = max(0.0, float(emitter_spread))
+        self.emitter_offsets = tuple(float(offset) for offset in emitter_offsets)
+        if not self.emitter_offsets:
+            self.emitter_offsets = (0.0,)
+        self.firing_order = tuple(
+            max(0, min(len(self.emitter_offsets) - 1, int(index)))
+            for index in firing_order
+        ) or tuple(range(len(self.emitter_offsets)))
 
     @property
     def position(self) -> Point:
@@ -358,6 +376,9 @@ class ProjectileEffect(PrototypeEffect):
             return
         if self.style == "monkey_assist":
             self._draw_monkey_assist(painter)
+            return
+        if self.style == "rolling_rainbow_cannon":
+            self._draw_rolling_rainbow_cannon(painter)
             return
         position = self.position
         alpha = int(255 * (1.0 - self.progress) * self.alpha_scale)
@@ -720,6 +741,278 @@ class ProjectileEffect(PrototypeEffect):
                 )
             painter.restore()
 
+    def rolling_rainbow_wave_phase(self, wave_index, elapsed=None):
+        """Return the deterministic travel phase for one rainbow wave."""
+        if elapsed is None:
+            elapsed = self.duration * self.progress
+        return (
+            max(0.0, float(elapsed)) - max(0, int(wave_index)) * self.wave_spacing
+        ) / self.wave_travel
+
+    def rolling_rainbow_wave_color(self, wave_index):
+        """Return a fixed palette entry for one wave in the sequence."""
+        if not self.rainbow_colors:
+            return self.color
+        return self.rainbow_colors[int(wave_index) % len(self.rainbow_colors)]
+
+    def rolling_rainbow_emitter_positions(self):
+        """Return fixed cannon silhouettes distributed across the firing lane."""
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / distance, dy / distance
+        px, py = -ny, nx
+        return tuple(
+            (
+                self.source[0] + px * offset * self.emitter_spread - nx * self.size * 0.16,
+                self.source[1] + py * offset * self.emitter_spread - ny * self.size * 0.16,
+            )
+            for offset in self.emitter_offsets
+        )
+
+    def rolling_rainbow_wave_emitter_index(self, wave_index):
+        """Return the deterministic cannon index for one flash event."""
+        return self.firing_order[int(wave_index) % len(self.firing_order)]
+
+    def rolling_rainbow_target_point(self, emitter_index):
+        """Return a deterministic impact lane for one summoned cannon."""
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        px, py = -dy / distance, dx / distance
+        offset = self.emitter_offsets[int(emitter_index)] * self.sweep_width * 0.34
+        return (
+            self.target[0] + px * offset,
+            self.target[1] + py * offset,
+        )
+
+    def _draw_rolling_rainbow_cannon(self, painter):
+        """Draw three summoned cannons firing a rolling rainbow sequence."""
+        dx = self.target[0] - self.source[0]
+        dy = self.target[1] - self.source[1]
+        distance = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / distance, dy / distance
+        px, py = -ny, nx
+        elapsed = self.duration * self.progress
+        entry_fade = 0.42 + 0.58 * min(1.0, elapsed / 0.20)
+        exit_fade = min(1.0, max(0.0, (self.duration - elapsed) / 0.45))
+        base_alpha = int(238 * self.alpha_scale * entry_fade * exit_fade)
+        if base_alpha <= 0:
+            return
+
+        emitter_positions = self.rolling_rainbow_emitter_positions()
+        recoil_levels = [0.0] * len(emitter_positions)
+        wave_states = []
+        for wave_index in range(self.visual_waves):
+            wave_elapsed = elapsed - wave_index * self.wave_spacing
+            if wave_elapsed < 0.0:
+                continue
+            wave_phase = wave_elapsed / self.wave_travel
+            emitter_index = self.rolling_rainbow_wave_emitter_index(wave_index)
+            wave_states.append((wave_index, wave_elapsed, wave_phase, emitter_index))
+            if 0.0 <= wave_elapsed < 0.16:
+                recoil_levels[emitter_index] = max(
+                    recoil_levels[emitter_index],
+                    1.0 - wave_elapsed / 0.16,
+                )
+
+        for emitter_index, emitter in enumerate(emitter_positions):
+            target_point = self.rolling_rainbow_target_point(emitter_index)
+            beam_dx = target_point[0] - emitter[0]
+            beam_dy = target_point[1] - emitter[1]
+            beam_distance = max(1.0, math.hypot(beam_dx, beam_dy))
+            beam_nx, beam_ny = beam_dx / beam_distance, beam_dy / beam_distance
+            beam_px, beam_py = -beam_ny, beam_nx
+            self._draw_rolling_cannon_turret(
+                painter,
+                emitter,
+                beam_nx,
+                beam_ny,
+                beam_px,
+                beam_py,
+                int(base_alpha * 0.82),
+                min(1.0, elapsed / 0.20),
+                recoil_levels[emitter_index],
+            )
+
+        for wave_index, wave_elapsed, wave_phase, emitter_index in wave_states:
+            wave_color = self.rolling_rainbow_wave_color(wave_index)
+            emitter = emitter_positions[emitter_index]
+            target_point = self.rolling_rainbow_target_point(emitter_index)
+            beam_dx = target_point[0] - emitter[0]
+            beam_dy = target_point[1] - emitter[1]
+            beam_distance = max(1.0, math.hypot(beam_dx, beam_dy))
+            beam_nx, beam_ny = beam_dx / beam_distance, beam_dy / beam_distance
+            beam_px, beam_py = -beam_ny, beam_nx
+
+            if wave_phase <= 1.0:
+                travel_ratio = 1.0 - (1.0 - max(0.0, wave_phase)) ** 1.12
+                position = _lerp(emitter, target_point, travel_ratio)
+                wave_alpha = int(base_alpha * (0.72 + 0.28 * (1.0 - wave_phase)))
+                trail_start = _lerp(
+                    emitter, position, max(0.0, travel_ratio - 0.18),
+                )
+                _draw_bloom_line(
+                    painter,
+                    trail_start,
+                    position,
+                    max(2.0, self.size * 0.10),
+                    wave_color,
+                    int(wave_alpha * 0.72),
+                    core_white=True,
+                )
+                self._draw_rolling_rainbow_flash(
+                    painter,
+                    position,
+                    beam_nx,
+                    beam_ny,
+                    beam_px,
+                    beam_py,
+                    wave_color,
+                    wave_alpha,
+                    wave_phase,
+                )
+
+                if self.muzzle_flash and wave_elapsed < 0.14:
+                    self._draw_cannon_muzzle(
+                        painter,
+                        beam_nx,
+                        beam_ny,
+                        beam_px,
+                        beam_py,
+                        1.0 - wave_elapsed / 0.14,
+                        int(wave_alpha * 0.82),
+                        origin=emitter,
+                    )
+                continue
+
+            impact_progress = min(1.0, (wave_phase - 1.0) / 0.30)
+            impact_alpha = int(base_alpha * 0.58 * (1.0 - impact_progress))
+            if impact_alpha <= 0:
+                continue
+            center = target_point
+            span = self.size * (0.72 + 0.45 * impact_progress)
+            painter.save()
+            painter.setPen(QPen(
+                _color(wave_color, impact_alpha),
+                max(1.3, self.size * 0.050 * (1.0 - impact_progress * 0.35)),
+                Qt.SolidLine,
+                Qt.RoundCap,
+            ))
+            for side in (-1.0, 1.0):
+                painter.drawLine(
+                    QPointF(
+                        center[0] - beam_nx * span * 0.80 + beam_px * side * self.size * 0.18,
+                        center[1] - beam_ny * span * 0.80 + beam_py * side * self.size * 0.18,
+                    ),
+                    QPointF(
+                        center[0] + beam_nx * span + beam_px * side * self.size * 0.34,
+                        center[1] + beam_ny * span + beam_py * side * self.size * 0.34,
+                    ),
+                )
+            painter.restore()
+
+    def _draw_rolling_cannon_turret(
+        self, painter, center, nx, ny, px, py, alpha, charge, recoil,
+    ):
+        """Draw one compact summoned cannon silhouette and its charge state."""
+        if alpha <= 0:
+            return
+        x, y = center
+        recoil_offset = self.size * self.recoil_scale * 0.18 * recoil
+        base_width = self.size * 0.92
+        base_height = self.size * 0.30
+        body_radius = self.size * 0.34
+
+        painter.save()
+        glow = QRadialGradient(QPointF(x, y), self.size * 1.15)
+        glow.setColorAt(0.0, QColor(255, 203, 123, int(alpha * (0.16 + 0.16 * charge))))
+        glow.setColorAt(1.0, QColor(255, 117, 58, 0))
+        painter.setBrush(QBrush(glow))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(QPointF(x, y), self.size * 1.10, self.size * 0.72)
+
+        base = QPainterPath(QPointF(x - base_width, y + base_height))
+        base.lineTo(QPointF(x + base_width, y + base_height))
+        base.lineTo(QPointF(x + base_width * 0.74, y - base_height * 0.30))
+        base.lineTo(QPointF(x - base_width * 0.74, y - base_height * 0.30))
+        base.closeSubpath()
+        painter.setBrush(QBrush(QColor(57, 42, 58, int(alpha * 0.94))))
+        painter.setPen(QPen(QColor(255, 205, 132, int(alpha * 0.90)), max(1.0, self.size * 0.045)))
+        painter.drawPath(base)
+
+        painter.setBrush(QBrush(QColor(116, 69, 59, int(alpha * 0.92))))
+        painter.drawEllipse(QPointF(x, y), body_radius, body_radius * 0.62)
+
+        barrel_start = (
+            x - nx * recoil_offset + nx * self.size * 0.08,
+            y - ny * recoil_offset + ny * self.size * 0.08,
+        )
+        barrel_end = (
+            barrel_start[0] + nx * self.size * 0.88,
+            barrel_start[1] + ny * self.size * 0.88,
+        )
+        painter.setPen(QPen(QColor(41, 31, 44, int(alpha * 0.96)), max(4.0, self.size * 0.22), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(*barrel_start), QPointF(*barrel_end))
+        painter.setPen(QPen(QColor(255, 176, 88, int(alpha * 0.88)), max(1.4, self.size * 0.060), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(*barrel_start), QPointF(*barrel_end))
+
+        if recoil > 0.0:
+            flash_center = (
+                barrel_end[0] + nx * self.size * 0.05,
+                barrel_end[1] + ny * self.size * 0.05,
+            )
+            flash_alpha = int(alpha * recoil * 0.72)
+            painter.setBrush(QBrush(QColor(255, 242, 181, flash_alpha)))
+            painter.setPen(QPen(QColor(255, 150, 64, flash_alpha), max(1.0, self.size * 0.035)))
+            painter.drawEllipse(QPointF(*flash_center), self.size * 0.18, self.size * 0.12)
+            for side in (-1.0, 1.0):
+                painter.drawLine(
+                    QPointF(flash_center[0] + px * side * self.size * 0.12,
+                            flash_center[1] + py * side * self.size * 0.12),
+                    QPointF(flash_center[0] + nx * self.size * 0.32 + px * side * self.size * 0.28,
+                            flash_center[1] + ny * self.size * 0.32 + py * side * self.size * 0.28),
+                )
+
+        painter.setBrush(QBrush(QColor(255, 223, 156, int(alpha * 0.80))))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(QPointF(x - self.size * 0.50, y + self.size * 0.24), self.size * 0.10, self.size * 0.10)
+        painter.drawEllipse(QPointF(x + self.size * 0.50, y + self.size * 0.24), self.size * 0.10, self.size * 0.10)
+        painter.restore()
+
+    def _draw_rolling_rainbow_flash(
+        self, painter, position, nx, ny, px, py, color, alpha, phase,
+    ):
+        """Draw a compact bright flash/bolt instead of a screen-sized band."""
+        activation = min(1.0, max(0.0, phase / 0.34))
+        length = self.size * (0.72 + 0.30 * activation)
+        width = self.size * (0.15 + 0.07 * activation)
+        front = (
+            position[0] + nx * length,
+            position[1] + ny * length,
+        )
+        back = (
+            position[0] - nx * length * 0.72,
+            position[1] - ny * length * 0.72,
+        )
+        flash = QPainterPath(QPointF(*front))
+        flash.lineTo(QPointF(position[0] + px * width, position[1] + py * width))
+        flash.lineTo(QPointF(*back))
+        flash.lineTo(QPointF(position[0] - px * width, position[1] - py * width))
+        flash.closeSubpath()
+
+        gradient = QLinearGradient(QPointF(*back), QPointF(*front))
+        gradient.setColorAt(0.0, _color(color, int(alpha * 0.12)))
+        gradient.setColorAt(0.52, _color(color, int(alpha * 0.88)))
+        gradient.setColorAt(1.0, QColor(255, 255, 226, int(alpha * 0.92)))
+        painter.save()
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(QPen(QColor(255, 244, 190, int(alpha * 0.90)), max(1.0, self.size * 0.032)))
+        painter.drawPath(flash)
+        painter.setPen(QPen(QColor(255, 255, 244, int(alpha * 0.88)), max(1.0, self.size * 0.038), Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(QPointF(*back), QPointF(*front))
+        painter.restore()
+
     def cannon_landing_point(self, shot_index):
         """Return a deterministic late-stage landing lane for a shell.
 
@@ -740,11 +1033,11 @@ class ProjectileEffect(PrototypeEffect):
             self.target[1] + py * offset,
         )
 
-    def _draw_cannon_muzzle(self, painter, nx, ny, px, py, pulse, alpha):
+    def _draw_cannon_muzzle(self, painter, nx, ny, px, py, pulse, alpha, origin=None):
         """Show pressure, flame, and rearward recoil at the cannon muzzle."""
         if alpha <= 0 or self.recoil_scale <= 0.0:
             return
-        source = self.source
+        source = self.source if origin is None else _point(origin)
         recoil = self.size * self.recoil_scale * (0.48 + 0.34 * pulse)
         cone_length = self.size * (0.72 + 0.25 * pulse)
         cone_width = self.size * (0.34 + 0.16 * pulse)
@@ -1858,6 +2151,7 @@ class VFXPreset:
 
 CANNONEER_CANNON_BARRAGE_SKILL_ID = "cannon_barrage"
 CANNONEER_MONKEY_ASSIST_SKILL_ID = "monkey_assist"
+CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID = "rolling_rainbow_cannon"
 
 _CANNON_BARRAGE_PARAMS = {
     "speed": 235.0,
@@ -1891,6 +2185,34 @@ _MONKEY_ASSIST_PARAMS = {
     "companion_offset": (-52.0, -26.0),
     "color": (255, 166, 72),
     "seed": 1304,
+}
+
+_ROLLING_RAINBOW_CANNON_PARAMS = {
+    "speed": 300.0,
+    "size": 30.0,
+    "lifetime": 2.10,
+    "shape": "rainbow_flash",
+    "style": "rolling_rainbow_cannon",
+    "visual_waves": 9,
+    "wave_spacing": 0.18,
+    "wave_travel": 0.20,
+    "sweep_width": 92.0,
+    "emitter_spread": 88.0,
+    "emitter_offsets": (-1.0, 0.0, 1.0),
+    "firing_order": (0, 1, 2, 1, 0, 1, 2, 1, 0),
+    "recoil_scale": 0.65,
+    "muzzle_flash": True,
+    "color": (255, 150, 74),
+    "rainbow_colors": (
+        (255, 82, 82),
+        (255, 166, 72),
+        (255, 224, 96),
+        (102, 224, 132),
+        (88, 210, 255),
+        (116, 132, 255),
+        (204, 122, 255),
+    ),
+    "seed": 1305,
 }
 
 
@@ -1982,6 +2304,11 @@ PRESETS = {
     CANNONEER_MONKEY_ASSIST_SKILL_ID: VFXPreset(
         CANNONEER_MONKEY_ASSIST_SKILL_ID, "projectile", dict(_MONKEY_ASSIST_PARAMS),
     ),
+    CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID: VFXPreset(
+        CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID,
+        "projectile",
+        dict(_ROLLING_RAINBOW_CANNON_PARAMS),
+    ),
     "bishop_holy_area": VFXPreset(
         "bishop_holy_area", "area",
         {"width": 190.0, "height": 72.0, "lifetime": 1.80, "pulse": True, "fade": True,
@@ -2034,6 +2361,7 @@ __all__ = [
     "AreaEffect",
     "CANNONEER_CANNON_BARRAGE_SKILL_ID",
     "CANNONEER_MONKEY_ASSIST_SKILL_ID",
+    "CANNONEER_ROLLING_RAINBOW_CANNON_SKILL_ID",
     "ImpactEffect",
     "LightningEffect",
     "MarkDetonationEffect",

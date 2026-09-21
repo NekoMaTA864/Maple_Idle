@@ -172,6 +172,7 @@ GALLERY_CLASS_REGISTRY = (
         "skills": (
             {"slot": 1, "skill_id": "cannon_barrage", "skill_label": "加農砲連擊", "preset": "cannon_barrage", "trigger": "play_preset", "source_anchor": "muzzle", "target_anchor": "hit"},
             {"slot": 2, "skill_id": "monkey_assist", "skill_label": "輔助猴子", "preset": "monkey_assist", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
+            {"slot": 3, "skill_id": "rolling_rainbow_cannon", "skill_label": "滾動彩虹加農砲", "preset": "rolling_rainbow_cannon", "trigger": "play_preset", "source_anchor": "attack_origin", "target_anchor": "hit"},
         ),
     },
     {
@@ -249,6 +250,7 @@ class VFXGalleryWindow(QMainWindow):
         ("舊版英雄斬擊", "hero_slash"),
         ("夜使者手裏劍", "night_lord_shuriken"),
         ("加農砲連擊", "cannon_barrage"),
+        ("滾動彩虹加農砲", "rolling_rainbow_cannon"),
         ("主教神聖領域", "bishop_holy_area"),
     )
     PRESET_BINDINGS = {
@@ -267,6 +269,7 @@ class VFXGalleryWindow(QMainWindow):
         "hero_slash": ("hero", "tip", "hit"),
         "night_lord_shuriken": ("night_lord", "attack_origin", "hit"),
         "cannon_barrage": ("cannon", "muzzle", "hit"),
+        "rolling_rainbow_cannon": ("cannon", "attack_origin", "hit"),
         "bishop_holy_area": ("bishop", "tip", "ground"),
     }
     # Canonical class-driven Gallery maps.
