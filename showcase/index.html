@@ -6,6 +6,40 @@
     <meta name="theme-color" content="#081321">
     <title>MapleIdle Combat Prototype</title>
     <link rel="stylesheet" href="./style.css">
+    <style>
+      @media (max-width: 640px) {
+        .page-shell,
+        .site-header,
+        .showcase-intro,
+        .build-grid,
+        .night-lord-entry {
+          min-width: 0;
+          max-width: 100%;
+        }
+
+        .page-shell {
+          width: min(calc(100% - 24px), 366px);
+          margin-left: 12px;
+          margin-right: 0;
+        }
+
+        .site-header > div,
+        .showcase-intro > div,
+        .showcase-intro .intro-copy,
+        .site-header h1,
+        .site-header .lede,
+        .showcase-intro h2 {
+          min-width: 0;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
+
+        .showcase-intro h2 {
+          font-size: clamp(1.45rem, 7vw, 2.25rem);
+        }
+      }
+    </style>
   </head>
   <body>
     <main class="page-shell">
