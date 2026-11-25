@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>聖騎士・林地哨站｜Maple Idle 樣張 03</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="battle.js" defer></script>
+</head>
+<body>
+<main class="layout">
+  <section class="game" aria-label="聖騎士戰鬥">
+    <header class="hud">
+      <h1><span class="rank"><span>4</span></span>60級 聖騎士</h1>
+      <p>金幣 48,200 <span>第 10 層</span></p>
+    </header>
+    <section class="progress" aria-label="戰鬥進度">
+      <button id="speed" aria-pressed="false">速戰</button>
+      <div><strong>戰鬥中 <time id="clock">00:24</time></strong><div class="meter progress-meter" aria-hidden="true"></div><small>擊敗炎魔</small></div>
+      <button id="auto" aria-pressed="false">自動</button>
+    </section>
+    <section class="enemies" aria-label="敵方">
+      <article class="slot fallen"><span class="icon" data-icon="grave"></span><strong>已擊破</strong></article>
+      <article class="slot"><span class="icon" data-icon="golem"></span><strong>火石像</strong><span class="value">HP 1840</span><div class="meter enemy-hp" style="--fill:46%" aria-hidden="true"></div></article>
+      <article class="slot boss" id="boss"><span class="icon" data-icon="demon"></span><strong>60級 炎魔</strong><span class="value" id="boss-hp">HP 12400</span><div class="meter enemy-hp" id="boss-meter" aria-hidden="true"></div><small id="boss-state">重擊攔截</small></article>
+      <article class="slot"><span class="icon" data-icon="bat"></span><strong>暗影蝙蝠</strong><span class="value">HP 920</span><div class="meter enemy-hp" style="--fill:67%" aria-hidden="true"></div></article>
+    </section>
+    <section id="field" class="field" aria-label="技能特效">
+      <div class="event">
+        <svg class="effect" viewBox="0 0 100 110" aria-hidden="true">
+          <g class="fx block"><path class="beam" d="M50 2 48 67"/><path class="trace" d="M18 71Q49 98 82 71M24 76Q51 92 74 77M39 68l-5-5m30 4 5-7m-24 8-1-7m11 8 3-9"/><path d="m48 70 2-6 2 6 7 2-7 2-2 6-2-6-7-2Z" fill="currentColor" stroke="none"/></g>
+          <g class="fx hit"><path class="trace" d="M14 80Q47 62 83 23M21 78Q65 62 91 22M56 28l4-9m-35 35-10 3m56 7 10 2M43 66l-6 9"/><path d="M26 79Q53 44 87 23Q64 56 26 79Z" fill="currentColor" opacity=".35" stroke="none"/></g>
+          <g class="fx ice"><path class="trace" d="M50 26v60m-26-45 52 30m0-30L24 71M43 33l7 7 7-7m-14 46 7-7 7 7M27 49l10-3-2-10m38 27-10 3 2 10M65 36l-2 10 10 3M35 76l2-10-10-3M19 33V22h11m40 0h11v11m0 45v11H70m-40 0H19V78"/></g>
+          <g class="fx buff"><path class="trace" d="m50 18 7 31 29 8-29 8-7 31-7-31-29-8 29-8ZM25 31l9 10m41-10L65 41m10 41L65 72m-40 10 9-10"/></g>
+        </svg>
+        <div class="event-copy"><strong id="effect-label">格擋 0 傷</strong><span id="effect-detail">護盾 +90</span></div>
+      </div>
+    </section>
+    <section class="allies" aria-label="我方技能及武器">
+      <button class="slot skill" data-skill="hit" aria-pressed="false"><span class="icon" data-icon="sanctuary"></span><strong>聖域</strong><small>冷卻 3s</small></button>
+      <button class="slot skill" data-skill="block" aria-pressed="true"><span class="icon" data-icon="shield"></span><strong>十字聖盾</strong><small>生效中</small></button>
+      <article class="slot core" id="core"><span class="icon" data-icon="hammer"></span><strong>聖鎚・審判</strong><div class="resources"><span>生命 <b>4820</b></span><div class="meter health" aria-hidden="true"></div><span>護盾 <b id="shield-value">320</b></span><div class="meter shield" id="shield-meter" aria-hidden="true"></div></div></article>
+      <button class="slot skill" data-skill="ice" aria-pressed="false"><span class="icon" data-icon="snow"></span><strong>壓制術</strong><small>就緒</small></button>
+      <button class="slot skill" data-skill="buff" aria-pressed="false"><span class="icon" data-icon="star"></span><strong>神聖結合</strong><small>就緒</small></button>
+    </section>
+    <footer class="bottom">
+      <p class="report" role="status"><time id="report-time">24.0 秒</time><span id="report-text">十字聖盾擋下炎魔重擊，吸收 420 傷</span></p>
+      <nav aria-label="遊戲頁籤">
+        <button data-page="角色">角色</button><button data-page="背包">背包</button><button data-page="戰鬥" aria-current="page">戰鬥</button><button data-page="地圖">地圖</button><button data-page="技能">技能</button>
+      </nav>
+    </footer>
+  </section>
+  <aside class="tools" aria-label="樣張控制">
+    <h2>樣張 03</h2>
+    <button id="replay">重播</button><button id="motion" aria-pressed="false">減少動畫</button><button id="gray" aria-pressed="false">灰階</button>
+  </aside>
+</main>
+<dialog id="preview">
+  <h2 id="preview-title"></h2><p id="preview-text"></p>
+  <form method="dialog"><button>返回戰鬥</button></form>
+</dialog>
+</body>
+</html>
