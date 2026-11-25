@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>林地哨站｜Maple Idle 美術樣張 02</title>
+<link rel="stylesheet" href="style.css">
+<main>
+  <header><div><small>MAPLE IDLE · 美術樣張 02</small><h1>林地哨站</h1></div><div class="settings"><button id="motion" aria-pressed="false">減少動畫</button><button id="gray" aria-pressed="false">灰階</button></div></header>
+  <section class="arena" aria-label="戰鬥卡槽">
+    <div class="row enemy">
+      <article class="card"><canvas data-art="slime" width="24" height="24" aria-hidden="true"></canvas><strong>苔蘚史萊姆</strong><div class="meter" style="--fill:75%" role="meter" aria-label="史萊姆生命" aria-valuenow="75"></div></article>
+      <article class="card boss" id="boss"><div class="boss-art"><canvas data-art="beetle" width="24" height="24" aria-hidden="true"></canvas></div><strong>琥珀甲蟲</strong><div class="meter" id="bossHp" role="meter" aria-label="首領生命" aria-valuenow="100"></div><span id="charge">衝撞蓄力</span><div class="meter charge" id="chargeBar" aria-hidden="true"></div></article>
+      <article class="card"><canvas data-art="moth" width="24" height="24" aria-hidden="true"></canvas><strong>紙鳶蛾</strong><div class="meter" style="--fill:62%" role="meter" aria-label="紙鳶蛾生命" aria-valuenow="62"></div></article>
+    </div>
+    <div class="lane" id="lane" data-effect="hit">
+      <div class="beam"></div>
+      <div class="stamp"><canvas id="effect" width="24" height="24" aria-hidden="true"></canvas><strong id="tag"></strong></div>
+    </div>
+    <div class="row allies">
+      <article class="card support" id="blockSource"><canvas data-art="block" width="24" height="24" aria-hidden="true"></canvas><strong>架盾</strong></article>
+      <article class="card core" id="weaponSource"><canvas id="weapon" width="24" height="24" aria-hidden="true"></canvas><strong id="weaponName"></strong><div class="core-meters"><span>生命</span><div class="meter health"></div><span>持盾</span><div class="meter shield" id="shield"></div></div></article>
+      <article class="card support" id="iceSource"><canvas data-art="ice" width="24" height="24" aria-hidden="true"></canvas><strong>冰輪</strong></article>
+    </div>
+  </section>
+  <section class="loadout" aria-label="選擇代表武器">
+    <div class="caption"><strong>武器核心</strong><span>冒險家 · 皇家騎士團 · 末日反抗軍</span></div>
+    <div id="weapons"></div>
+  </section>
+  <section class="console">
+    <div class="report" role="status"><small>戰鬥手記</small><p><time id="time"></time><span id="report"></span></p></div>
+    <div class="actions" aria-label="試放特效"><button data-event="hit">命中</button><button data-event="block">格擋</button><button data-event="ice">冰凍</button><button id="replay" aria-label="再次播放">↻ 重播</button></div>
+  </section>
+</main>
+<script src="art.js"></script>
+</html>
