@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>林地哨站｜三版美術比較</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; color: #f2eade; background: #171512; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1220px; margin: auto; padding: 20px 14px 32px; }
+  h1 { margin: 0 0 8px; font-size: 25px; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  button, .full { color: inherit; font: inherit; border: 1px solid #665949; border-radius: 4px; background: #27211b; padding: 6px 11px; cursor: pointer; }
+  button[aria-pressed=true] { color: #22170a; background: #e5c891; border-color: #e5c891; }
+  button:focus-visible, a:focus-visible { outline: 2px solid #f4d39b; outline-offset: 2px; }
+  .comparison { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+  .comparison.single { grid-template-columns: minmax(0,460px); justify-content: center; }
+  article { min-width: 0; }
+  article[hidden] { display: none; }
+  h2 { font-size: 17px; margin: 0 0 2px; }
+  .caption { color: #d0c2b1; margin: 0 0 8px; font-size: 14px; }
+  .preview { display: block; width: 100%; height: auto; }
+  .original { display: block; }
+  .mock { aspect-ratio: 9/16; display: grid; grid-template-rows: 8% 16% 48% 13% 15%; background: #100e0c; border: 1px solid #6c5841; container-type: inline-size; }
+  .mock header { display: flex; justify-content: space-between; align-items: center; padding: 0 3%; border-bottom: 1px solid #584d42; font-size: 4.1cqw; }
+  .mock header span { font-size: 3.5cqw; }
+  .slots { display: grid; grid-template-columns: 1fr 1.18fr 1fr; gap: 1.2%; padding: 2.5% 2%; }
+  .slot { overflow: hidden; border: 1px solid #564a3c; background: #191511; display: flex; align-items: center; gap: 4%; padding: 5%; font-size: 3.65cqw; line-height: 1.32; }
+  .slot.selected { border-color: #c8a574; }
+  .slot small, .slot strong { display: block; }
+  .slot small { color: #d0bc9e; font-size: 3.15cqw; }
+  .slot .icon { color: #e2d4bc; font-size: 5cqw; flex: none; }
+  .field { position: relative; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 50%,#1a130d,#0d0b09 70%); border-block: 1px solid #34291e; }
+  .impact { color: #f1dbb5; font-size: 3.9cqw; display: flex; align-items: center; gap: 8px; }
+  .arc { width: 14cqw; height: 4cqw; border-top: 2px solid #f6d6a3; border-radius: 50%; filter: drop-shadow(0 0 3px #c48139); transform: rotate(5deg); }
+  .report { padding: 1.4% 3%; border-top: 1px solid #584d42; font-size: 3.5cqw; display: grid; align-content: center; gap: 6px; }
+  .report p { margin: 0; }
+  .keys { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }
+  .keys button { font-size: 3.7cqw; padding: 3px; }
+  @media(max-width: 730px) { .comparison { grid-template-columns: minmax(0,460px); justify-content: center; } }
+</style>
+<main>
+  <h1>林地哨站 · 三版比較</h1>
+  <nav aria-label="選擇預覽">
+    <button data-view="all" aria-pressed="true">並排比較</button>
+    <button data-view="codex" aria-pressed="false">Codex</button>
+    <button data-view="agy" aria-pressed="false">agy</button>
+    <button data-view="hybrid" aria-pressed="false">合體</button>
+  </nav>
+  <div class="comparison">
+    <article id="codex">
+      <h2>Codex 版</h2><p class="caption">緊湊橫排，中央空間最大。點圖可放大。</p>
+      <a class="original" href="codex.png"><img class="preview" src="codex.png" alt="Codex 版。敵我卡槽為橫排文字與線稿，中央寬敞。"></a>
+    </article>
+    <article id="agy">
+      <h2>agy 版</h2><p class="caption">卡內顯示狀態，戰報和按鈕分行。點圖可放大。</p>
+      <a class="original" href="agy.jpg"><img class="preview" src="agy.jpg" alt="agy 版。上下卡槽帶狀態短字，底部操作列分行。"></a>
+    </article>
+    <article id="hybrid">
+      <h2>合體版</h2><p class="caption">橫排卡槽加上狀態與分行按鈕。可試切換三個事件。</p>
+      <section class="mock" aria-label="合體版戰鬥示意">
+        <header><strong>林地哨站</strong><span>戰鬥 00:12</span></header>
+        <div class="slots">
+          <div class="slot"><span class="icon" aria-hidden="true">♧</span><div><strong>苔蘚史萊姆</strong><small>42/56 · 待機</small></div></div>
+          <div class="slot selected"><span class="icon" aria-hidden="true">◇</span><div><strong>琥珀甲蟲</strong><small id="enemy-state">168/200 · 攔截</small></div></div>
+          <div class="slot"><span class="icon" aria-hidden="true">⋈</span><div><strong>紙鳶蛾</strong><small>48/62 · 待機</small></div></div>
+        </div>
+        <div class="field"><div class="impact"><i class="arc" aria-hidden="true"></i><strong id="event-label">格擋 0 傷</strong></div></div>
+        <div class="slots">
+          <div class="slot selected" data-source="block"><div><strong>架盾</strong><small id="block-state">生效中</small></div></div>
+          <div class="slot" data-source="hit"><span class="icon" aria-hidden="true">⚔︎</span><div><strong>巡誓大劍</strong><small>生命 100/100</small></div></div>
+          <div class="slot" data-source="ice"><div><strong>冰輪</strong><small id="ice-state">就緒</small></div></div>
+        </div>
+        <div class="report"><p id="log" role="status">12.0 秒｜架盾擋下甲蟲衝撞。</p><div class="keys">
+          <button data-event="hit" aria-pressed="false">命中</button><button data-event="block" aria-pressed="true">格擋</button><button data-event="ice" aria-pressed="false">冰凍</button>
+        </div></div>
+      </section>
+    </article>
+  </div>
+</main>
+<script>
+  const viewButtons = [...document.querySelectorAll("[data-view]")];
+  for (const button of viewButtons) {
+    button.onclick = () => {
+      const view = button.dataset.view;
+      document.querySelector(".comparison").classList.toggle("single", view !== "all");
+      document.querySelectorAll("article").forEach(panel => {
+        panel.hidden = view !== "all" && panel.id !== view;
+      });
+      viewButtons.forEach(choice => choice.setAttribute("aria-pressed", String(choice === button)));
+    };
+  }
+  const eventButtons = [...document.querySelectorAll("[data-event]")];
+  const events = {
+    hit: ["命中 −18", "150/200 · 受擊", "04.2 秒｜大劍命中甲蟲。", "#d9af84", "rotate(-18deg)"],
+    block: ["格擋 0 傷", "168/200 · 攔截", "12.0 秒｜架盾擋下甲蟲衝撞。", "#f6d6a3", "rotate(5deg)"],
+    ice: ["冰凍打斷", "168/200 · 打斷", "10.8 秒｜冰輪中斷甲蟲蓄力。", "#badce8", "rotate(0deg)"]
+  };
+  for (const button of eventButtons) {
+    button.onclick = () => {
+      const event = button.dataset.event;
+      const [label, enemyState, report, color, rotation] = events[event];
+      document.querySelector("#event-label").textContent = label;
+      document.querySelector("#enemy-state").textContent = enemyState;
+      document.querySelector("#log").textContent = report;
+      document.querySelector("#block-state").textContent = event === "block" ? "生效中" : "就緒";
+      document.querySelector("#ice-state").textContent = event === "ice" ? "生效中" : "就緒";
+      const arc = document.querySelector(".arc");
+      arc.style.borderColor = color;
+      arc.style.transform = rotation;
+      document.querySelectorAll("[data-source]").forEach(slot => slot.classList.toggle("selected", slot.dataset.source === event));
+      eventButtons.forEach(choice => choice.setAttribute("aria-pressed", String(choice === button)));
+    };
+  }
+</script>
+</html>
