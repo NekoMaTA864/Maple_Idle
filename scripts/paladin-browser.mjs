@@ -199,11 +199,16 @@ try {
   if (diagnostics) console.error(diagnostics);
   throw error;
 } finally {
-  socket?.close();
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ id: 0, method: 'Browser.close' }));
+    socket.close();
+  }
+  browser.stderr.destroy();
   if (browser.exitCode === null && browser.pid) {
     browser.kill();
     await Promise.race([new Promise(done => browser.once('exit', done)), sleep(1500)]);
   }
+  server.closeAllConnections();
   server.close();
   await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {});
 }
