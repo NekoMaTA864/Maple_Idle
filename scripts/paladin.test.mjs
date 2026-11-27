@@ -5,6 +5,8 @@ import {
   startBattle, stats, tick,
 } from '../showcase/play/rules.mjs';
 
+import { swingGeometry, sample } from '../showcase/play/brushes.mjs';
+
 const fixed = () => .5;
 
 function fight(save, stage) {
@@ -96,4 +98,40 @@ test('offline accrues only while stationed, caps at 120 minutes and survives rel
   assert.equal(save.savedAt, 30 * minute);
   assert.deepEqual(settleOffline(save, 210 * minute, fixed), { minutes: 120, gold: 240, dust: 120, drops: 8 });
   assert.equal(save.bag.length, 9);
+});
+
+test('swings bend along the normal, stay within safe bounds, and use exact static midpoints', () => {
+  const bounds = { width:390, top:32, bottom:260 };
+  for (const [kind, lo, hi] of [['strike',34,54], ['counter',28,44], ['basic',18,32]]) {
+    const geometry = (value, reduced = false, side = -1) => swingGeometry(kind,
+      {x:195,y:230}, {x:52,y:58}, bounds, side, reduced, () => {
+        if (reduced) assert.fail('static rendering sampled RNG');
+        return value;
+      });
+    assert.equal(geometry(0).bend,lo);
+    assert.equal(geometry(1).bend,hi);
+    const {a,b,c,bend} = geometry(0,true);
+    assert.equal(bend,(lo+hi)/2);
+    const dx = c.x - (a.x+b.x)/2, dy = c.y - (a.y+b.y)/2;
+    assert.ok(Math.abs(dx*(b.x-a.x)+dy*(b.y-a.y)) < 1e-7);
+    assert.ok(Math.abs(Math.hypot(dx,dy)-bend) < 1e-7);
+    assert.ok(dx > 0);
+    if (kind === 'counter') assert.deepEqual(geometry(.1),geometry(.1,false,1));
+    for (const extreme of [-90,490]) {
+      const g = swingGeometry(kind,{x:195,y:400},{x:extreme,y:-40},bounds,-1,false,()=>1);
+      for (const pt of [g.a,g.b,g.c,g.inner]) {
+        assert.ok(pt.x >= 15 && pt.x <= 375 && pt.y >= 47 && pt.y <= 245);
+      }
+    }
+  }
+  assert.equal(sample(-4,4,true,()=>assert.fail()),0);
+});
+
+test('strike impact ring follows the shield bonus at the actual cast', () => {
+  const save = newSave(0);
+  for (const [order, expected] of [[BOSS_ORDER,true],[DEFAULT_ORDER,false]]) {
+    save.order = [...order];
+    const hit = fight(save,3).events.find(e => e.kind === 'hit' && e.source === 'strike');
+    assert.equal(hit.shieldBonus,expected);
+  }
 });

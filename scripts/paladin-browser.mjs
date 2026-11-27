@@ -117,10 +117,19 @@ try {
   await send('Page.addScriptToEvaluateOnNewDocument', { source: 'Math.random = () => 0.38' });
   await load();
   await fit(390, 844);
+  assert.equal(await evaluate("document.querySelector('link[rel=preload][as=image]').href.endsWith('/assets/tombstone.svg')"),true);
   await click('#speed');
   await click('#action');
   await until(() => evaluate("document.querySelector('.top-band .tone-hit') !== null"), 'live outgoing hit');
   await shot('390x844-4x-hit.png');
+  await until(() => evaluate("!!document.querySelector('[data-kind=sweep]')"), 'live horizontal sweep');
+  await sleep(90);
+  await shot('390x844-4x-sweep.png');
+  await until(() => evaluate("!!document.querySelector('[data-kind=orbit-track] image')"), 'live orbiting hammer');
+  await shot('390x844-4x-orbit.png');
+  await until(() => evaluate("document.querySelectorAll('.enemy').length > 0 && !document.querySelector('.enemy:not(.fallen)')"), 'wave cleared');
+  await sleep(520);
+  assert.equal(await evaluate("document.querySelectorAll('.vfx-stage > g,.callout').length"),0);
   await until(async () => {
     const state = await saved();
     return state.firstBoss && state.best === 3 && state.running === null;
@@ -203,6 +212,8 @@ try {
   await evaluate(`(async () => {
     const field = document.querySelector('#field');
     window.fxTest = (await import('./effects.mjs')).createEffects(field);
+    document.querySelector('#field-note').style.display = 'none';
+    field.querySelector('.field-note').hidden = true;
     const template = document.querySelector('#enemy-0');
     document.querySelector('#enemies').replaceChildren(...Array.from({ length: 4 }, (_, i) => {
       const card = template.cloneNode(true);
@@ -227,6 +238,7 @@ try {
     for (const speed of [1,4]) for (const reduced of [false,true]) for (const gray of [false,true]) {
       await evaluate(`(() => {
         fxTest.clear();
+        document.querySelector('#speed').textContent = '${speed}×';
         document.body.classList.toggle('reduce', ${reduced});
         document.body.classList.toggle('gray', ${gray});
         const hits = Array.from({length:4}, (_,i) => ({kind:'hit', source:'sweep', target:'enemy-'+i, amount:125}));
@@ -239,9 +251,19 @@ try {
       assert.equal(await verifyGeometry(), true, `geometry ${width} ${speed} ${gray} ${reduced}`);
       assert.equal(await evaluate("document.querySelectorAll('[data-kind=incoming]').length"), 1);
       assert.equal(await evaluate("document.querySelector('[data-kind=incoming]').dataset.source"), 'enemy-2');
-      assert.equal(await evaluate("document.querySelectorAll('[data-kind=outgoing]').length"), 4);
+      assert.equal(await evaluate("document.querySelectorAll('[data-kind=sweep]').length"), 1);
       assert.equal(await evaluate("[...document.querySelectorAll('.top-band .callout')].every(n => n.textContent === '▲ −125') && document.querySelectorAll('.top-band .callout').length === 4"), true);
       assert.equal(await evaluate("document.querySelectorAll('.fx-anim-draw').length === 0"), reduced);
+      assert.equal(await evaluate(`(() => {
+        const box = q => document.querySelector(q).getBoundingClientRect();
+        const halo = box('[data-kind=heal]'), shield = box('[data-kind=shield]'), label = box('.tone-heal');
+        const delta = Math.abs((halo.left+halo.right-label.left-label.right)/2);
+        return halo.left > shield.right && delta < 1 && [...document.querySelectorAll('.vfx-stage > g')].every(g => {
+          const r = g.getBoundingClientRect();
+          return r.top >= box('.top-band').bottom-.5 && r.bottom <= box('.bottom-band').top+.5 &&
+            r.left >= box('#field').left && r.right <= box('#field').right;
+        });
+      })()`),true,'glyph safety and recovery alignment');
       if (width === 390 && gray && reduced && speed === 4) await shot('390x844-4x-gray-reduced-four-target-test.png');
     }
   }
@@ -252,6 +274,41 @@ try {
   assert.equal(await evaluate("document.querySelector('[data-kind=incoming]').getAttribute('opacity')"), '0.3');
   assert.equal(await evaluate("document.querySelector('[data-kind=counter]').dataset.target"), 'enemy-2');
   assert.equal(await visible('[data-kind=shield] line'),true);
+  await evaluate(`fxTest.clear(); fxTest.play([{kind:'block',source:'enemy-2',raw:86,absorbed:86,lost:0},
+    {kind:'hit',source:'guard',target:'enemy-2',amount:15}],4,false);
+    fxTest.clear();`);
+  await sleep(240);
+  assert.equal(await visible('.vfx-stage > g,.callout'),false,'clear cancels delayed effects');
+  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  await until(() => evaluate("document.querySelector('#motion').getAttribute('aria-pressed') === 'true'"),'system reduced motion applied');
+  await evaluate(`fxTest.play([{kind:'hit',source:'strike',target:'enemy-2',amount:50,shieldBonus:true}],1,false)`);
+  assert.equal(await evaluate("document.querySelector('[data-kind=strike]').dataset.bend"),'44');
+  assert.equal(await visible('[data-kind=strike] circle'),true);
+  await evaluate(`fxTest.play([{kind:'hit',source:'break',target:'enemy-2',amount:12},{kind:'ice',target:'enemy-2'}],1,false)`);
+  assert.equal(await visible('[data-kind=strike]'),false);
+  assert.equal(await visible('[data-kind=break]'),true);
+  await evaluate(`fxTest.play([{kind:'hit',target:'enemy-2',amount:5}],1,false)`);
+  assert.equal(await visible('[data-kind=basic]'),false,'ordinary swing respects interrupt priority');
+  for (const [speed, expectedTtl] of [[1,420],[4,220]]) {
+    const check = await evaluate(`(async () => {
+      fxTest.clear();
+      fxTest.play([{kind:'hit',target:'enemy-1',amount:8}],${speed},true);
+      const slash = document.querySelector('[data-kind=basic]');
+      const box = slash.getBoundingClientRect();
+      const field = document.querySelector('#field');
+      const safe = box.top > field.querySelector('.top-band').getBoundingClientRect().bottom &&
+        box.bottom < field.querySelector('.bottom-band').getBoundingClientRect().top;
+      await new Promise(done => setTimeout(done, ${expectedTtl}+30));
+      return [slash.dataset.bend, slash.querySelectorAll('path').length, safe, slash.isConnected];
+    })()`);
+    assert.deepEqual(check,['25',1,true,false]);
+  }
+  await evaluate(`fxTest.clear(); fxTest.syncOrbit(true,1,true)`);
+  assert.equal(await visible('[data-kind=orbit-track] ellipse'),true);
+  assert.equal(await visible('[data-kind=orbit-track] animateMotion'),false);
+  await evaluate(`fxTest.syncOrbit(false,1,true)`);
+  assert.equal(await visible('[data-kind=orbit-track]'),false);
+  await send('Emulation.setEmulatedMedia',{features:[]});
   console.log('PASS 16 geometry configurations, four-way AOE, two incoming enemies, healing, shield contact and counter target');
   assert.deepEqual(pageErrors, []);
   console.log('PASS 1280×800, reorder, boss interrupt, motion/grayscale, reload during combat and victory');

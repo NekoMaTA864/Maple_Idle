@@ -168,7 +168,7 @@ function damage(battle, unit, amount, title, source) {
   const multiplier = unit.exposedUntil > battle.time ? 1 + hero.attributes.expose / 100 : 1;
   const hit = Math.min(unit.hp, Math.max(1, Math.round(amount * multiplier)));
   unit.hp -= hit;
-  record(battle, 'hit', `${title} −${hit}`, `${title}命中${unit.name}，造成 ${hit} 傷害${unit.hp === 0 ? '並擊破' : ''}`, source, unit.id, { amount: hit });
+  record(battle, 'hit', `${title} −${hit}`, `${title}命中${unit.name}，造成 ${hit} 傷害${unit.hp === 0 ? '並擊破' : ''}`, source, unit.id, { amount: hit, shieldBonus: source === 'strike' && hero.shield > 0 });
 }
 
 function cast(battle, hero, enemies, id) {

@@ -319,6 +319,8 @@ get('speed').addEventListener('click', event => {
 get('tester').textContent = testMode ? '返回正式試玩' : '開啟測試存檔';
 get('tester').href = testMode ? './' : './?test=1';
 function showMotion() {
+  effects.clear();
+  reduced ||= motionPreference.matches;
   document.body.classList.toggle('reduce', reduced);
   get('motion').setAttribute('aria-pressed', reduced);
 }
@@ -463,7 +465,11 @@ setInterval(() => {
         reportTime = interrupt.time;
       }
     }
-    if (battle.result) endBattle(now);
+    effects.syncOrbit(!battle.result && battle.orbit?.remaining > 0, speed, reduced);
+    if (battle.result) {
+      effects.clear();
+      endBattle(now);
+    }
   }
   renderBattle();
 }, 80);
