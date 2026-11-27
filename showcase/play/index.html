@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>聖騎士・林地哨站｜Maple Idle</title>
+  <link rel="stylesheet" href="../art/03/style.css">
+  <link rel="stylesheet" href="./play.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<main class="layout">
+  <section class="game" aria-label="聖騎士戰鬥">
+    <header class="hud">
+      <h1><span class="rank" aria-hidden="true"><span>✦</span></span>聖騎士</h1>
+      <p>金幣 <b id="gold">0</b><span id="zone">林地哨站</span></p>
+    </header>
+    <section class="progress" aria-label="戰鬥進度">
+      <button id="speed" type="button" aria-label="四倍速" aria-pressed="false">1×</button>
+      <div><strong id="battle-status">苔石入口</strong><div id="progress" class="meter progress-meter" aria-hidden="true"></div><small id="stage-status">林地哨站</small></div>
+      <button id="action" type="button">推關</button>
+    </section>
+    <section class="enemies" id="enemies" aria-label="敵方"></section>
+    <section id="field" class="field" aria-label="技能特效">
+      <div class="event">
+        <svg class="effect" viewBox="0 0 100 110" aria-hidden="true">
+          <g class="fx block"><path class="beam" d="M50 2 48 67"/><path class="trace" d="M18 71Q49 98 82 71M24 76Q51 92 74 77M39 68l-5-5m30 4 5-7m-24 8-1-7m11 8 3-9"/></g>
+          <g class="fx hit"><path class="trace" d="M14 80Q47 62 83 23M21 78Q65 62 91 22M56 28l4-9m-35 35-10 3m56 7 10 2M43 66l-6 9"/></g>
+          <g class="fx ice"><path class="trace" d="M20 42V25h17m26 0h17v17m0 30v17H63m-26 0H20V72M35 73l30-32m-30 0 30 32"/></g>
+          <g class="fx buff"><path class="trace" d="m50 18 7 31 29 8-29 8-7 31-7-31-29-8 29-8ZM25 31l9 10m41-10L65 41m10 41L65 72m-40 10 9-10"/></g>
+        </svg>
+        <div class="event-copy"><strong id="effect-label"></strong><span id="effect-detail"></span></div>
+      </div>
+      <p id="field-note" class="field-note">按「推關」後，聖騎士會自動戰鬥</p>
+    </section>
+    <section class="allies" id="allies" aria-label="我方技能與武器"></section>
+    <footer class="bottom">
+      <p class="report"><time id="report-time">0.0 秒</time><span id="report-text">林地哨站</span></p>
+      <nav aria-label="遊戲頁籤">
+        <button type="button" data-panel="character">角色</button><button type="button" data-panel="bag">背包</button><button type="button" data-panel="battle" aria-current="page">戰鬥</button><button type="button" data-panel="map">地圖</button><button type="button" data-panel="skills">技能</button>
+      </nav>
+    </footer>
+  </section>
+  <aside class="tools" aria-label="顯示設定">
+    <button type="button" id="motion" aria-pressed="false">減少動畫</button>
+    <button type="button" id="gray" aria-pressed="false">灰階</button>
+    <a id="tester" href="./?test=1">開啟測試存檔</a>
+  </aside>
+</main>
+<dialog id="panel" aria-labelledby="panel-title">
+  <header><h2 id="panel-title"></h2><form method="dialog"><button>返回戰鬥</button></form></header>
+  <p id="notice" role="status"></p>
+  <div id="panel-body"></div>
+</dialog>
+</body>
+</html>

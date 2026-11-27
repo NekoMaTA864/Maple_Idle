@@ -1,0 +1,53 @@
+.game { grid-template-rows: 7% 8% 17% 42% 16.8% 9.2%; }
+.hud h1 { font-family: Georgia, "Microsoft JhengHei", serif; }
+.hud p b { color: var(--text); font-variant-numeric: tabular-nums; }
+.progress { grid-template-columns: 14% 1fr 23%; gap: 2%; }
+.progress button { min-height: 35px; }
+.progress-meter { --fill: 0%; }
+button:disabled, select:disabled { cursor: default; opacity: .54; }
+.slot { gap: 2px; }
+.slot.vacant { background: transparent; border-color: #322b25; color: var(--muted); }
+.slot.hit { outline: 1px solid #e4baa4; }
+.slot.charging { border-style: dashed; border-color: #d1aa69; }
+.slot.interrupted { background: repeating-linear-gradient(135deg,#191612 0 5px,#292319 5px 6px); }
+.slot .icon { max-height: 70%; }
+.allies .skill, .allies .core { min-height: 0; }
+.allies .skill strong { font-size: min(3.35cqw, 15px); }
+.allies .skill { position: relative; min-height: 65px; }
+.allies .skill .order { position: absolute; top: 3px; left: 5px; font-size: 2.65cqw; color: #d9b67c; }
+.report span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.report time { flex: none; }
+.field-note { position: absolute; left: 8%; right: 8%; top: 47%; text-align: center; color: var(--muted); margin: 0; font-size: 3.7cqw; }
+.field[data-event=charge], .field[data-event=hurt] { color: #e5a292; }
+.field[data-event=charge] .buff, .field[data-event=hurt] .hit { display: block; }
+.field[data-event]:not([data-event=""]) .effect { opacity: .9; }
+body.reduce .field * { animation: none !important; }
+body.gray dialog { filter: grayscale(1); }
+.tools a { color: var(--muted); font-size: 13px; text-align: center; padding: 6px; }
+.tools a:focus-visible { outline: 2px solid #ead2a3; }
+dialog { width: min(480px, calc(100vw - 24px)); max-width: none; max-height: 88dvh; padding: 14px; }
+dialog header { display: flex; gap: 6px; justify-content: space-between; align-items: center; }
+dialog p { font-size: 14px; color: var(--muted); margin: 8px 0; }
+dialog #notice:empty { display: none; }
+dialog #notice { color: #e6c692; }
+dialog h3 { margin: 14px 0 6px; font-size: 15px; color: #d9b67c; }
+dialog ol { padding: 0; list-style: none; }
+dialog li { margin: 0; }
+dialog select { min-height: 34px; min-width: 0; max-width: 100%; font: inherit; font-size: 14px; color: inherit; background: #211b16; border: 1px solid var(--line); }
+.sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.sheet-row small { display: block; color: var(--muted); }
+.sheet-row strong { font-size: 14px; }
+.sheet-actions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.sheet-row .sheet-actions { justify-content: end; flex: none; }
+.sheet-actions button { min-width: 34px; }
+.item { border: 1px solid var(--line); margin-top: 8px; padding: 8px; }
+.item .sheet-row:first-child { padding-top: 0; }
+.item .sheet-row:last-child { border: 0; padding-bottom: 0; }
+.affix { font-size: 14px; }
+.log-list { margin: 4px 0; max-height: 42dvh; overflow: auto; font-size: 13px; }
+.log-list li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.log-list time { color: #d9b67c; padding-right: 6px; }
+@media(max-width: 360px) {
+  .sheet-row { gap: 4px; }
+  dialog { padding: 10px; }
+}
