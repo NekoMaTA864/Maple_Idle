@@ -159,8 +159,8 @@ export function startBattle(save, stage) {
   };
 }
 
-function record(battle, kind, title, text, source, target) {
-  battle.events.push({ time: battle.time, kind, title, text, source, target });
+function record(battle, kind, title, text, source, target, details = {}) {
+  battle.events.push({ time: battle.time, kind, title, text, source, target, ...details });
 }
 
 function damage(battle, unit, amount, title, source) {
@@ -168,7 +168,7 @@ function damage(battle, unit, amount, title, source) {
   const multiplier = unit.exposedUntil > battle.time ? 1 + hero.attributes.expose / 100 : 1;
   const hit = Math.min(unit.hp, Math.max(1, Math.round(amount * multiplier)));
   unit.hp -= hit;
-  record(battle, 'hit', `${title} −${hit}`, `${title}命中${unit.name}，造成 ${hit} 傷害${unit.hp === 0 ? '並擊破' : ''}`, source, unit.id);
+  record(battle, 'hit', `${title} −${hit}`, `${title}命中${unit.name}，造成 ${hit} 傷害${unit.hp === 0 ? '並擊破' : ''}`, source, unit.id, { amount: hit });
 }
 
 function cast(battle, hero, enemies, id) {
@@ -198,7 +198,7 @@ function cast(battle, hero, enemies, id) {
     case 'heal': {
       const recovered = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * (.29 + hero.attributes.prayer / 100)));
       hero.hp += recovered;
-      record(battle, 'buff', `生命 +${recovered}`, `回生禱言回復 ${recovered} 生命`, id);
+      record(battle, 'buff', `生命 +${recovered}`, `回生禱言回復 ${recovered} 生命`, id, hero.id, { amount: recovered });
       break;
     }
     case 'break':
@@ -222,7 +222,7 @@ function enemyHit(battle, enemy, heavy) {
   const lost = Math.min(ally.hp, raw - absorbed);
   ally.hp -= lost;
   const attack = heavy ? '重擊' : '攻擊';
-  record(battle, absorbed ? 'block' : 'hurt', absorbed ? `格擋 ${absorbed}` : `生命 −${lost}`, `${enemy.name}${attack}，${ally.name}承受 ${lost} 傷害${absorbed ? `，格擋 ${absorbed}` : ''}`);
+  record(battle, absorbed ? 'block' : 'hurt', absorbed ? `格擋 ${absorbed}` : `生命 −${lost}`, `${enemy.name}${attack}，${ally.name}承受 ${lost} 傷害${absorbed ? `，格擋 ${absorbed}` : ''}`, enemy.id, ally.id, { raw, absorbed, lost, heavy });
   if (absorbed && ally.hp > 0 && ally.kind === 'hero') damage(battle, enemy, ally.attributes.attack * .65, '盾誓反擊', 'guard');
 }
 

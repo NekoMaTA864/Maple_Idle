@@ -2,6 +2,7 @@ import {
   AFFIXES, BOSS_ORDER, DEFAULT_ORDER, OFFLINE, PITY, SKILLS, SLOTS, STAGES, STEP,
   affixChoices, finishBattle, newSave, readSave, reforge, reroll, settleOffline, startBattle, stats, tick, upgradeCost,
 } from './rules.mjs';
+import { createEffects } from './effects.mjs';
 import { icon } from './icons.mjs';
 
 const get = id => document.getElementById(id);
@@ -23,9 +24,7 @@ let battle;
 let readyAt = 0;
 let battleLog = [];
 let eventIndex = 0;
-let effectAt = -Infinity;
-let lastEffect;
-let lastVisual;
+const effects = createEffects(field);
 let speed = 1;
 let activePanel = '';
 let bagId;
@@ -38,7 +37,6 @@ let heartbeat = Date.now();
 let lastFrame = performance.now();
 let accumulator = 0;
 
-const effectPriority = { ice: 4, charge: 3, block: 2, hurt: 2, buff: 1, hit: 1 };
 
 function setReport(text, time = 0) {
   lastReport = text;
@@ -95,8 +93,7 @@ function queue(stage, mode) {
   save.running = { stage, mode };
   battle = null;
   readyAt = performance.now();
-  lastEffect = null;
-  lastVisual = null;
+  effects.clear();
   checkpoint();
   panel.close();
 }
@@ -104,9 +101,7 @@ function queue(stage, mode) {
 function startQueued() {
   battle = startBattle(save, save.running.stage);
   eventIndex = 0;
-  effectAt = -Infinity;
-  lastEffect = null;
-  lastVisual = null;
+  effects.clear();
   setReport(`開始挑戰 ${STAGES[battle.stage].name}`);
 }
 
@@ -114,8 +109,7 @@ function stop() {
   if (!save.running || !writable()) return;
   save.running = null;
   battle = null;
-  lastEffect = null;
-  lastVisual = null;
+  effects.clear();
   setReport('已停止戰鬥，可以調整技能與裝備');
   checkpoint();
   renderBattle();
@@ -132,29 +126,19 @@ function endBattle(now) {
   renderPanel();
 }
 
+const skillArt = {
+  "guard": "<img src=\"./assets/paladin-shield.svg\" alt=\"\" aria-hidden=\"true\">",
+  "strike": "<svg viewBox=\"0 0 40 40\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\n            <path d=\"m17 14 6-8 11 8-6 9Z\"/>\n            <path d=\"m20 18-13 15 3 2 13-15\"/>\n            <path d=\"M6 12l5 2M8 6l5 3\"/>\n          </svg>",
+  "break": "<svg viewBox=\"0 0 40 40\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\n            <path d=\"M20 5 33 12.5v15L20 35 7 27.5v-15L20 5Z\"/>\n            <path d=\"M13 20h14M20 13v14M15 15l10 10\"/>\n          </svg>",
+  "heal": "<svg viewBox=\"0 0 40 40\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\n            <path d=\"m20 6 3.6 10.4L34 20l-10.4 3.6L20 34l-3.6-10.4L6 20l10.4-3.6Z\"/>\n            <path d=\"M11 11l3 3m15-3-3 3m3 15-3-3m-15 3 3-3\"/>\n          </svg>"
+};
+
 function shownSkill(id, order, hero) {
   const skill = SKILLS[id];
   const left = hero && !battle.result ? Math.max(0, hero.cooldowns[id] - battle.time) : 0;
-  return `<button type="button" class="slot skill" data-skill="${id}" aria-pressed="${lastVisual?.source === id}" aria-label="${order} ${skill.name}，開啟技能配置">
-    <span class="order">${order}</span><span class="icon">${icon(skill.icon)}</span>
-    <strong>${skill.name}</strong><small>${left > 0 ? '冷卻 ' + Math.ceil(left) + 's' : '就緒'}</small></button>`;
-}
-
-function renderEffect() {
-  const visible = lastEffect && performance.now() - effectAt < (speed === 1 ? 1250 : 850);
-  const event = visible ? lastEffect : null;
-  lastVisual = event;
-  get('field-note').hidden = Boolean(save.running || battle);
-  if (get('effect-label').textContent !== (event?.title ?? '') || field.dataset.event !== (event?.kind ?? '')) {
-    field.classList.remove('play');
-    field.dataset.event = event?.kind ?? '';
-    get('effect-label').textContent = event?.title ?? '';
-    get('effect-detail').textContent = event?.kind === 'ice' ? '斷勢聖印' : '';
-    if (event) {
-      void field.offsetWidth;
-      field.classList.add('play');
-    }
-  }
+  return `<button type="button" class="slot skill" data-skill="${id}" aria-label="${order} ${skill.name}，開啟技能配置">
+    <span class="order">${order}</span><span class="slot-icon">${skillArt[id] ?? icon(skill.icon)}</span>
+    <strong class="slot-name">${skill.name}</strong><small class="slot-cd">${left > 0 ? '冷卻 ' + Math.ceil(left) + 's' : '就緒'}</small></button>`;
 }
 
 function renderBattle() {
@@ -173,7 +157,7 @@ function renderBattle() {
   get('report-time').textContent = reportTime.toFixed(1) + ' 秒';
   get('report-text').textContent = lastReport;
   get('report-text').title = lastReport;
-  renderEffect();
+  get('field-note').hidden = Boolean(save.running || battle);
 
   const enemies = battle?.enemies ?? stage.enemies.map((name, index) => ({ name, hp: stage.hp, maxHp: stage.hp, boss: stage.boss, id: `enemy-${index}` }));
   const enemyRow = Array.from({ length: 4 }, (_, index) => {
@@ -181,13 +165,11 @@ function renderBattle() {
     if (!enemy) return '<article class="slot vacant" aria-label="空敵槽">—</article>';
     const { id, hp, maxHp, name, boss, impact } = enemy;
     const charging = impact != null;
-    const targeted = lastVisual?.target === id;
-    const interrupted = targeted && lastVisual.kind === 'ice';
-    const shape = !hp ? 'grave' : boss ? 'demon' : name === '林間蝠' ? 'bat' : 'golem';
-    return `<article class="slot ${boss ? 'boss' : ''} ${hp ? '' : 'fallen'} ${charging ? 'charging' : ''} ${targeted ? 'hit' : ''} ${interrupted ? 'interrupted' : ''}">
-      <span class="icon">${icon(shape)}</span><strong>${hp ? name : '已擊破'}</strong>
-      <span class="value">HP ${hp}</span><div class="meter enemy-hp" style="--fill:${hp / maxHp * 100}%" aria-hidden="true"></div>
-      ${charging ? '<small>重擊蓄力</small>' : interrupted ? '<small>已打斷</small>' : ''}</article>`;
+    const shape = !hp ? 'tombstone' : boss ? 'grayhorn-warden' : name === '林間蝠' ? 'forest-bat' : 'moss-beast';
+    return `<article id="${id}" class="slot enemy ${boss ? 'boss' : ''} ${hp ? '' : 'fallen'} ${charging ? 'charging' : ''}">
+      <span class="slot-icon"><img src="./assets/${shape}.svg" alt=""></span><strong class="slot-name">${hp ? name : '已擊破'}</strong>
+      <span class="slot-hp">HP <b>${hp}</b></span><div class="meter enemy-hp" style="--fill:${hp / maxHp * 100}%" aria-hidden="true"></div>
+      <small class="slot-state">${charging ? '重擊蓄力' : hp ? '待機' : '已擊破'}</small></article>`;
   }).join('');
   if (get('enemies').dataset.render !== enemyRow) {
     get('enemies').innerHTML = enemyRow;
@@ -197,9 +179,19 @@ function renderBattle() {
   const hp = hero?.hp ?? attributes.hp;
   const shield = hero?.shield ?? 0;
   const weapon = save.equipped.weapon ? '哨衛聖鎚' : '見習聖鎚';
-  const core = `<article class="slot core"><span class="icon">${icon('hammer')}</span><strong>${weapon}</strong>
-      <div class="resources"><span>生命 <b>${hp}</b></span><div class="meter health" style="--fill:${hp / attributes.hp * 100}%"></div>
-      <span>護盾 <b>${shield}</b></span><div class="meter shield" style="--fill:${shield / Math.max(1, Math.round(attributes.hp * .4)) * 100}%"></div></div></article>`;
+  const core = `<article class="slot core" id="hero-core" aria-label="聖騎士武器與護盾核心">
+        <div class="core-emblems">
+          <img class="emblem-hammer" src="./assets/trainee-hammer.svg" alt="" aria-hidden="true">
+          <img class="emblem-shield" id="core-shield-icon" src="./assets/paladin-shield.svg" alt="" aria-hidden="true">
+        </div>
+        <strong class="slot-name">${weapon}</strong>
+        <div class="resources">
+          <div class="res-line"><span>生命</span><b id="hero-hp">${hp}</b></div>
+          <div class="meter health" id="hero-hpbar" style="--fill:${hp / attributes.hp * 100}%" aria-hidden="true"></div>
+          <div class="res-line"><span>護盾</span><b id="hero-shield">${shield}</b></div>
+          <div class="meter shield" id="hero-shieldbar" style="--fill:${shield / Math.max(1, Math.round(attributes.hp * .4)) * 100}%" aria-hidden="true"></div>
+        </div>
+      </article>`;
   const row = order.map((id, index) => shownSkill(id, index + 1, hero));
   row.splice(2, 0, core);
   const allyRow = row.join('');
@@ -210,6 +202,7 @@ function renderBattle() {
     allies.dataset.render = allyRow;
     if (focused) allies.querySelector(`[data-skill="${focused}"]`)?.focus({ preventScroll: true });
   }
+  effects.refreshCards();
 }
 
 const button = (operation, label, value = '', disabled = false, description = '') =>
@@ -452,21 +445,23 @@ setInterval(() => {
       accumulator = 0;
     }
     accumulator += delta / 1000 * speed;
-    let visual;
+    const beats = [];
     while (accumulator >= STEP && !battle.result) {
       accumulator -= STEP;
       tick(battle);
-      for (const event of battle.events.slice(eventIndex)) {
-        setReport(event.text, event.time);
-        if (event.kind !== 'cast' && (!visual || effectPriority[event.kind] >= effectPriority[visual.kind])) visual = event;
-      }
+      const events = battle.events.slice(eventIndex);
+      for (const event of events) setReport(event.text, event.time);
+      if (events.length) beats.push(events);
       eventIndex = battle.events.length;
     }
-    if (visual && (!lastEffect || effectPriority[visual.kind] >= effectPriority[lastEffect.kind] || now - effectAt >= 550)) {
-      lastEffect = visual;
-      effectAt = now;
-      lastReport = visual.text;
-      reportTime = visual.time;
+    renderBattle();
+    for (const beat of beats) {
+      effects.play(beat, speed, reduced);
+      const interrupt = beat.find(event => event.kind === 'ice');
+      if (interrupt) {
+        lastReport = interrupt.text;
+        reportTime = interrupt.time;
+      }
     }
     if (battle.result) endBattle(now);
   }

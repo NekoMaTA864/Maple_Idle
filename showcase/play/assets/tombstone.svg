@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#ece6da" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 墓碑：沿用已擊破陣亡格位語意，補上石裂與草葉 -->
+  <path stroke-width="1.6" d="M13.5 39V20.5a10.5 10.5 0 0 1 21 0V39"/>
+  <path stroke-width="1.65" d="M9.5 39.5H38.5"/>
+  <path stroke-width="1.25" d="M24 16v9M20 19.5h8M17.5 29h13M19.5 33h9"/>
+  <path stroke-width="1.15" d="M31.5 16.5 28.5 20.2 30.2 22.5M10.5 39 7.8 35.6M37.5 39 40.4 35.4"/>
+</svg>

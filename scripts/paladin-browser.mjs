@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL('../showcase/', import.meta.url));
 const screenshotDir = process.argv[2] && resolve(process.argv[2]);
 const edge = process.env.MAPLE_EDGE_PATH ?? join(process.env['ProgramFiles(x86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe');
 const key = 'maple-idle.paladin.v1.test';
-const types = { html: 'text/html', css: 'text/css', mjs: 'text/javascript' };
+const types = { html: 'text/html', css: 'text/css', svg: 'image/svg+xml', mjs: 'text/javascript' };
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   const local = resolve(root, '.' + path + (path.endsWith('/') ? 'index.html' : ''));
@@ -119,6 +119,8 @@ try {
   await fit(390, 844);
   await click('#speed');
   await click('#action');
+  await until(() => evaluate("document.querySelector('.top-band .tone-hit') !== null"), 'live outgoing hit');
+  await shot('390x844-4x-hit.png');
   await until(async () => {
     const state = await saved();
     return state.firstBoss && state.best === 3 && state.running === null;
@@ -178,13 +180,15 @@ try {
   await click('[data-op="down"][data-value="0"]');
   await close();
   await click('#action');
-  await until(() => evaluate('document.querySelector("#field").dataset.event === "ice"'), 'visible boss interrupt');
-  await shot('聖騎士-390x844.png');
+  const visible = selector => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
+  await until(() => visible('.tone-interrupt'), 'visible boss interrupt');
+  await sleep(190);
+  await shot('390x844-1x-interrupt.png');
   await fit(1280, 800);
-  await shot('聖騎士-1280x800.png');
   await click('#motion');
   await click('#gray');
-  assert.equal(await evaluate('document.body.classList.contains("gray") && document.body.classList.contains("reduce")'), true);
+  await until(() => visible('.tone-counter'), 'static grayscale counter');
+  await shot('1280x800-1x-gray-reduced-counter.png');
 
   await load();
   assert.equal((await saved()).running.mode, 'boss');
@@ -193,6 +197,62 @@ try {
   assert.match(await text('#report-text'), /擊破灰角守衛/);
   assert.equal((await saved()).bag.at(-1).slot, 'charm');
   assert.deepEqual((await saved()).order, ['guard', 'strike', 'break', 'heal']);
+  // Exercise the real renderer with a deterministic four-enemy beat, including
+  // combinations that the first three stages do not naturally produce.
+  await load();
+  await evaluate(`(async () => {
+    const field = document.querySelector('#field');
+    window.fxTest = (await import('./effects.mjs')).createEffects(field);
+    const template = document.querySelector('#enemy-0');
+    document.querySelector('#enemies').replaceChildren(...Array.from({ length: 4 }, (_, i) => {
+      const card = template.cloneNode(true);
+      card.id = 'enemy-' + i;
+      return card;
+    }));
+  })()`);
+  const verifyGeometry = () => evaluate(`(() => {
+    const badges = [...document.querySelectorAll('.callout')];
+    const protectedNodes = [...document.querySelectorAll('.slot-name,.slot-hp,.meter,.slot-cd,.report')];
+    const overlaps = (a,b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    return badges.length > 0 && badges.every((badge,i) => {
+      const r = badge.getBoundingClientRect(), band = badge.parentElement.getBoundingClientRect();
+      return r.width > 0 && r.left >= band.left - 0.5 && r.right <= band.right + 0.5 &&
+        r.top >= band.top - 0.5 && r.bottom <= band.bottom + 0.5 &&
+        ![...protectedNodes, ...badges.slice(i+1)].some(n => overlaps(r,n.getBoundingClientRect()));
+    });
+  })()`);
+  for (const [width,height] of [[390,844],[1280,800]]) {
+    await fit(width,height);
+    await sleep(80);
+    for (const speed of [1,4]) for (const reduced of [false,true]) for (const gray of [false,true]) {
+      await evaluate(`(() => {
+        fxTest.clear();
+        document.body.classList.toggle('reduce', ${reduced});
+        document.body.classList.toggle('gray', ${gray});
+        const hits = Array.from({length:4}, (_,i) => ({kind:'hit', source:'sweep', target:'enemy-'+i, amount:125}));
+        fxTest.play([...hits,{kind:'hurt',source:'enemy-1',raw:20,lost:20},
+          {kind:'block',source:'enemy-2',heavy:true,raw:86,absorbed:86,lost:0},
+          {kind:'buff',source:'heal',amount:55}], ${speed}, ${reduced});
+      })()`);
+      await until(() => visible('.tone-block'), 'impact');
+      await sleep(35);
+      assert.equal(await verifyGeometry(), true, `geometry ${width} ${speed} ${gray} ${reduced}`);
+      assert.equal(await evaluate("document.querySelectorAll('[data-kind=incoming]').length"), 1);
+      assert.equal(await evaluate("document.querySelector('[data-kind=incoming]').dataset.source"), 'enemy-2');
+      assert.equal(await evaluate("document.querySelectorAll('[data-kind=outgoing]').length"), 4);
+      assert.equal(await evaluate("[...document.querySelectorAll('.top-band .callout')].every(n => n.textContent === '▲ −125') && document.querySelectorAll('.top-band .callout').length === 4"), true);
+      assert.equal(await evaluate("document.querySelectorAll('.fx-anim-draw').length === 0"), reduced);
+      if (width === 390 && gray && reduced && speed === 4) await shot('390x844-4x-gray-reduced-four-target-test.png');
+    }
+  }
+  await evaluate(`fxTest.clear(); fxTest.play([{kind:'block',source:'enemy-2',heavy:true,raw:86,absorbed:86,lost:0},
+    {kind:'hit',source:'guard',target:'enemy-2',amount:15}],4,false)`);
+  assert.equal(await visible('[data-kind=counter]'),false);
+  await until(() => visible('[data-kind=counter]'), 'counter follows contact');
+  assert.equal(await evaluate("document.querySelector('[data-kind=incoming]').getAttribute('opacity')"), '0.3');
+  assert.equal(await evaluate("document.querySelector('[data-kind=counter]').dataset.target"), 'enemy-2');
+  assert.equal(await visible('[data-kind=shield] line'),true);
+  console.log('PASS 16 geometry configurations, four-way AOE, two incoming enemies, healing, shield contact and counter target');
   assert.deepEqual(pageErrors, []);
   console.log('PASS 1280×800, reorder, boss interrupt, motion/grayscale, reload during combat and victory');
 } catch (error) {
